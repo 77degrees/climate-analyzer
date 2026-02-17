@@ -11,6 +11,7 @@ async def discover_sensors(ha: HAClient, db: AsyncSession) -> int:
     """Auto-discover climate entities from HA and upsert into sensors table.
     Returns count of newly discovered sensors."""
     states = await ha.get_climate_entities()
+    platforms = await ha.get_entity_platforms()
     new_count = 0
 
     for state in states:
@@ -25,6 +26,7 @@ async def discover_sensors(ha: HAClient, db: AsyncSession) -> int:
         friendly_name = attrs.get("friendly_name", eid)
         device_class = attrs.get("device_class")
         unit = attrs.get("unit_of_measurement")
+        platform = platforms.get(eid, "")
 
         # For climate entities, set device_class to temperature
         if domain == "climate":
@@ -32,9 +34,10 @@ async def discover_sensors(ha: HAClient, db: AsyncSession) -> int:
             unit = attrs.get("temperature_unit", "°F")
 
         if sensor:
-            # Update friendly name if changed
-            if sensor.friendly_name != friendly_name:
-                sensor.friendly_name = friendly_name
+            # Update fields that may have changed
+            sensor.friendly_name = friendly_name
+            if platform:
+                sensor.platform = platform
         else:
             sensor = Sensor(
                 entity_id=eid,
@@ -42,12 +45,13 @@ async def discover_sensors(ha: HAClient, db: AsyncSession) -> int:
                 domain=domain,
                 device_class=device_class,
                 unit=unit,
+                platform=platform,
                 is_outdoor=domain == "weather",
                 is_tracked=domain in ("climate", "weather"),
             )
             db.add(sensor)
             new_count += 1
-            logger.info(f"Discovered sensor: {eid} ({friendly_name})")
+            logger.info(f"Discovered sensor: {eid} ({friendly_name}) [{platform}]")
 
     await db.commit()
     logger.info(f"Discovery complete: {new_count} new sensors, {len(states)} total")

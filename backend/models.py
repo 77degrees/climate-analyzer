@@ -24,6 +24,7 @@ class Sensor(Base):
     domain: Mapped[str] = mapped_column(String(50))  # climate, sensor, weather
     device_class: Mapped[str | None] = mapped_column(String(50), nullable=True)  # temperature, humidity
     unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(50), nullable=True)  # nest, ecobee, switchbot, tuya, mqtt, zha, etc.
     zone_id: Mapped[int | None] = mapped_column(ForeignKey("zones.id"), nullable=True)
     is_outdoor: Mapped[bool] = mapped_column(Boolean, default=False)
     is_tracked: Mapped[bool] = mapped_column(Boolean, default=True)

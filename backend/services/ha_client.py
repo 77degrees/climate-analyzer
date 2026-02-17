@@ -1,4 +1,6 @@
+import json
 import httpx
+import websockets
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,6 +11,7 @@ class HAClient:
 
     def __init__(self, url: str, token: str):
         self.base_url = url.rstrip("/")
+        self.token = token
         self.headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -37,8 +40,18 @@ class HAClient:
             resp.raise_for_status()
             return resp.json()
 
+    # Device classes relevant to climate/environment monitoring
+    CLIMATE_DEVICE_CLASSES = {
+        "temperature", "humidity", "atmospheric_pressure", "pressure",
+        "aqi", "carbon_dioxide", "carbon_monoxide",
+        "pm1", "pm25", "pm10", "pm100",
+        "volatile_organic_compounds", "volatile_organic_compounds_parts",
+        "nitrogen_dioxide", "ozone", "sulphur_dioxide",
+        "dewpoint", "wind_speed",
+    }
+
     async def get_climate_entities(self) -> list[dict]:
-        """Filter states to climate-relevant entities."""
+        """Filter states to all climate/environment-relevant entities."""
         states = await self.get_states()
         relevant = []
         for state in states:
@@ -50,12 +63,47 @@ class HAClient:
                 relevant.append(state)
             elif domain == "sensor":
                 dc = attrs.get("device_class", "")
-                if dc in ("temperature", "humidity"):
+                if dc in self.CLIMATE_DEVICE_CLASSES:
                     relevant.append(state)
-            elif domain == "weather":
+            elif domain in ("weather", "air_quality", "fan"):
                 relevant.append(state)
 
         return relevant
+
+    async def get_entity_platforms(self) -> dict[str, str]:
+        """Get entity_id -> platform map via HA WebSocket API."""
+        ws_url = self.base_url.replace("http://", "ws://").replace("https://", "wss://") + "/api/websocket"
+        try:
+            async with websockets.connect(ws_url, max_size=2**24) as ws:  # 16MB limit
+                # Wait for auth_required
+                msg = json.loads(await ws.recv())
+                if msg.get("type") != "auth_required":
+                    return {}
+
+                # Authenticate
+                await ws.send(json.dumps({"type": "auth", "access_token": self.token}))
+                msg = json.loads(await ws.recv())
+                if msg.get("type") != "auth_ok":
+                    logger.warning(f"WS auth failed: {msg}")
+                    return {}
+
+                # Request entity registry
+                await ws.send(json.dumps({"id": 1, "type": "config/entity_registry/list"}))
+                msg = json.loads(await ws.recv())
+
+                if not msg.get("success"):
+                    logger.warning(f"Entity registry request failed: {msg}")
+                    return {}
+
+                result = msg.get("result", [])
+                return {
+                    e.get("entity_id", ""): e.get("platform", "")
+                    for e in result
+                    if e.get("entity_id")
+                }
+        except Exception as e:
+            logger.warning(f"Failed to get entity platforms via WS: {e}")
+            return {}
 
     def parse_climate_state(self, state: dict) -> dict:
         """Extract structured data from a climate entity state."""

@@ -37,6 +37,7 @@ class SensorOut(BaseModel):
     domain: str
     device_class: str | None
     unit: str | None
+    platform: str | None
     zone_id: int | None
     is_outdoor: bool
     is_tracked: bool

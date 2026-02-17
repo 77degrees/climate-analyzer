@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.DEV ? "http://localhost:8400/api" : "/api";
+export const API_BASE = "/api";
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -92,6 +92,7 @@ export interface Sensor {
   domain: string;
   device_class: string | null;
   unit: string | null;
+  platform: string | null;
   zone_id: number | null;
   is_outdoor: boolean;
   is_tracked: boolean;
@@ -130,6 +131,20 @@ export interface DbStats {
   newest_reading: string | null;
 }
 
+export interface SensorWithZone extends Sensor {
+  zone_name: string | null;
+  zone_color: string | null;
+  platform: string | null;
+}
+
+export interface LiveState {
+  state: string;
+  value: number | null;
+  unit: string | null;
+  hvac_action: string | null;
+  hvac_mode: string | null;
+}
+
 export interface RecoveryEvent {
   start_time: string;
   end_time: string | null;
@@ -165,6 +180,8 @@ export const getWeatherHistory = (hours: number) => fetchJSON<WeatherPoint[]>(`/
 export const getCurrentWeather = () => fetchJSON<WeatherPoint | null>("/weather/current");
 
 export const getSensors = () => fetchJSON<Sensor[]>("/sensors");
+export const getSensorsWithZones = () => fetchJSON<SensorWithZone[]>("/sensors/with-zones");
+export const getLiveStates = () => fetchJSON<Record<string, LiveState>>("/sensors/live-states");
 export const updateSensor = (id: number, data: Partial<Sensor>) =>
   fetchJSON<Sensor>(`/sensors/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const discoverSensors = () => fetchJSON<{ discovered: number }>("/sensors/discover", { method: "POST" });

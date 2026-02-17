@@ -5,11 +5,13 @@ import {
   Gauge,
   Settings,
   Thermometer,
+  Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/sensors", icon: Radio, label: "Sensors" },
   { to: "/history", icon: History, label: "History" },
   { to: "/performance", icon: Gauge, label: "Performance" },
   { to: "/settings", icon: Settings, label: "Settings" },
