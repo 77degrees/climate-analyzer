@@ -14,11 +14,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
 } from "recharts";
 import { StatCard } from "@/components/shared/StatCard";
 import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import { formatTemp, formatHumidity } from "@/lib/utils";
 import {
   getDashboard,
@@ -71,8 +69,15 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Build chart data points
-  const chartPoints = buildChartPoints(chartData);
+  // Filter to zoned sensors only (excludes appliances, vehicles, batteries)
+  const zonedSensors = chartData.filter((s) => s.zone_id != null);
+
+  // Build zone name lookup from dashboard data
+  const zoneNameMap = new Map<number, string>();
+  data?.zone_cards.forEach((z) => zoneNameMap.set(z.zone_id, z.zone_name));
+
+  // Build chart data points — one line per zone (averaged)
+  const { chartPoints, chartLines } = buildZoneChart(zonedSensors, zoneNameMap);
 
   if (loading) {
     return (
@@ -168,28 +173,28 @@ export default function Dashboard() {
                   fontSize: 12,
                 }}
               />
-              {chartData
-                .filter((s) => !s.is_outdoor)
-                .map((sensor) => (
+              {chartLines
+                .filter((l) => !l.isOutdoor)
+                .map((line) => (
                   <Line
-                    key={sensor.sensor_id}
+                    key={line.key}
                     type="monotone"
-                    dataKey={sensor.entity_id}
-                    name={sensor.friendly_name}
-                    stroke={sensor.zone_color || "#06b6d4"}
+                    dataKey={line.key}
+                    name={line.name}
+                    stroke={line.color}
                     strokeWidth={2}
                     dot={false}
                   />
                 ))}
               {/* Outdoor line - dashed */}
-              {chartData
-                .filter((s) => s.is_outdoor)
-                .map((sensor) => (
+              {chartLines
+                .filter((l) => l.isOutdoor)
+                .map((line) => (
                   <Line
-                    key={sensor.sensor_id}
+                    key={line.key}
                     type="monotone"
-                    dataKey={sensor.entity_id}
-                    name={sensor.friendly_name}
+                    dataKey={line.key}
+                    name={line.name}
                     stroke="#f59e0b"
                     strokeWidth={2}
                     strokeDasharray="5 5"
@@ -304,25 +309,93 @@ export default function Dashboard() {
   );
 }
 
-function buildChartPoints(sensors: SensorReadings[]): Record<string, any>[] {
-  // Merge all sensor readings into time-aligned data points
-  const timeMap = new Map<string, Record<string, any>>();
+interface ChartLine {
+  key: string;
+  name: string;
+  color: string;
+  isOutdoor: boolean;
+}
+
+function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, string>): {
+  chartPoints: Record<string, any>[];
+  chartLines: ChartLine[];
+} {
+  // Group sensors by zone
+  const zoneMap = new Map<
+    number,
+    { sensors: SensorReadings[]; color: string; isOutdoor: boolean }
+  >();
 
   for (const sensor of sensors) {
-    for (const r of sensor.readings) {
-      const time = new Date(r.timestamp).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
+    if (sensor.zone_id == null) continue;
+    if (!zoneMap.has(sensor.zone_id)) {
+      zoneMap.set(sensor.zone_id, {
+        sensors: [],
+        color: sensor.zone_color || "#06b6d4",
+        isOutdoor: sensor.is_outdoor,
       });
-      if (!timeMap.has(r.timestamp)) {
-        timeMap.set(r.timestamp, { time, _ts: r.timestamp });
-      }
-      const point = timeMap.get(r.timestamp)!;
-      point[sensor.entity_id] = r.value;
+    }
+    const group = zoneMap.get(sensor.zone_id)!;
+    group.sensors.push(sensor);
+    // If any sensor in the zone is outdoor, mark the zone as outdoor
+    if (sensor.is_outdoor) group.isOutdoor = true;
+  }
+
+  // Use provided zone names or fall back to zone ID
+  const zoneNames = zoneNameMap || new Map<number, string>();
+
+  // Collect all unique timestamps
+  const allTimestamps = new Set<string>();
+  for (const sensor of sensors) {
+    for (const r of sensor.readings) {
+      allTimestamps.add(r.timestamp);
     }
   }
 
-  return Array.from(timeMap.values()).sort((a, b) =>
+  // Build time-aligned points with zone averages
+  const timeMap = new Map<string, Record<string, any>>();
+
+  for (const ts of allTimestamps) {
+    const time = new Date(ts).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const point: Record<string, any> = { time, _ts: ts };
+
+    for (const [zoneId, group] of zoneMap) {
+      const key = `zone_${zoneId}`;
+      const values: number[] = [];
+
+      for (const sensor of group.sensors) {
+        const reading = sensor.readings.find((r) => r.timestamp === ts);
+        if (reading?.value != null) {
+          values.push(reading.value);
+        }
+      }
+
+      if (values.length > 0) {
+        // Average all sensor values for this zone at this timestamp
+        point[key] = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
+      }
+    }
+
+    timeMap.set(ts, point);
+  }
+
+  const chartPoints = Array.from(timeMap.values()).sort((a, b) =>
     a._ts.localeCompare(b._ts),
   );
+
+  // Build chart line definitions
+  const chartLines: ChartLine[] = [];
+  for (const [zoneId, group] of zoneMap) {
+    chartLines.push({
+      key: `zone_${zoneId}`,
+      name: zoneNames.get(zoneId) || `Zone ${zoneId}`,
+      color: group.color,
+      isOutdoor: group.isOutdoor,
+    });
+  }
+
+  return { chartPoints, chartLines };
 }
