@@ -6,6 +6,7 @@ from models import Sensor, Reading, WeatherObservation, AppSetting
 from services.ha_client import HAClient
 from services.nws_client import NWSClient
 from database import async_session
+from config import settings as app_config
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +91,9 @@ async def collect_nws_observation():
     async with async_session() as db:
         station_id = await _get_setting(db, "nws_station_id")
         if not station_id:
-            # Try to resolve
-            lat_str = await _get_setting(db, "nws_lat")
-            lon_str = await _get_setting(db, "nws_lon")
+            # Try to resolve — use DB values or fall back to config defaults
+            lat_str = await _get_setting(db, "nws_lat") or str(app_config.nws_lat)
+            lon_str = await _get_setting(db, "nws_lon") or str(app_config.nws_lon)
             if not lat_str or not lon_str:
                 logger.debug("NWS not configured, skipping")
                 return
