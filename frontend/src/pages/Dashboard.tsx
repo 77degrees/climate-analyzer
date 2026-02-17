@@ -54,7 +54,7 @@ export default function Dashboard() {
     try {
       const [dash, readings] = await Promise.all([
         getDashboard(),
-        getReadings(2),
+        getReadings(2, "temperature"),
       ]);
       setData(dash);
       setChartData(readings);

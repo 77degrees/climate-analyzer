@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/readings", tags=["readings"])
 async def get_readings(
     hours: int = Query(24, ge=1, le=8760),
     sensor_ids: str | None = Query(None, description="Comma-separated sensor IDs"),
+    device_class: str | None = Query(None, description="Filter by device_class (e.g. temperature, humidity)"),
     db: AsyncSession = Depends(get_db),
 ):
     """Get readings for tracked sensors within time range."""
@@ -23,6 +24,8 @@ async def get_readings(
     if sensor_ids:
         ids = [int(x) for x in sensor_ids.split(",")]
         query = query.where(Sensor.id.in_(ids))
+    if device_class:
+        query = query.where(Sensor.device_class == device_class)
     result = await db.execute(query)
     sensors = result.scalars().all()
 

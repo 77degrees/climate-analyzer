@@ -177,7 +177,8 @@ export interface MetricsSummary {
 // ── API calls ────────────────────────────────────────────────
 
 export const getDashboard = () => fetchJSON<DashboardData>("/dashboard");
-export const getReadings = (hours: number) => fetchJSON<SensorReadings[]>(`/readings?hours=${hours}`);
+export const getReadings = (hours: number, deviceClass?: string) =>
+  fetchJSON<SensorReadings[]>(`/readings?hours=${hours}${deviceClass ? `&device_class=${deviceClass}` : ""}`);
 export const getWeatherHistory = (hours: number) => fetchJSON<WeatherPoint[]>(`/weather/history?hours=${hours}`);
 export const getCurrentWeather = () => fetchJSON<WeatherPoint | null>("/weather/current");
 
