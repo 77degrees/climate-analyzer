@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Dark-only theme — matches Quorum design system */
+  :root {
+    --background: 222 47% 5%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 41% 8%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 41% 8%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 190 95% 39%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 222 25% 14%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 222 25% 14%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 222 25% 14%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 160 84% 39%;
+    --brand: 38 92% 50%;
+
+    --border: 222 20% 18%;
+    --input: 222 20% 18%;
+    --ring: 190 95% 39%;
+
+    --sidebar: 222 44% 6%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-active: 217 91% 50%;
+
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}

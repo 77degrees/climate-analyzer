@@ -1,0 +1,18 @@
+services:
+  climate-analyzer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: climate-analyzer
+    restart: unless-stopped
+    ports:
+      - "8400:8400"
+    volumes:
+      - /mnt/user/appdata/climate-analyzer/data:/app/data
+    environment:
+      - HA_URL=${HA_URL:-http://homeassistant.local:8123}
+      - HA_TOKEN=${HA_TOKEN:-}
+      - NWS_LAT=${NWS_LAT:-30.5788}
+      - NWS_LON=${NWS_LON:-97.8531}
+      - TZ=America/Chicago
+      - DATA_DIR=/app/data
