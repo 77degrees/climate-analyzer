@@ -143,6 +143,8 @@ export interface LiveState {
   unit: string | null;
   hvac_action: string | null;
   hvac_mode: string | null;
+  last_updated: string | null;
+  last_changed: string | null;
 }
 
 export interface RecoveryEvent {

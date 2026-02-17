@@ -58,6 +58,8 @@ async def get_live_states(db: AsyncSession = Depends(get_db)):
             "unit": attrs.get("unit_of_measurement"),
             "hvac_action": attrs.get("hvac_action"),
             "hvac_mode": s.get("state") if domain == "climate" else None,
+            "last_updated": s.get("last_updated"),
+            "last_changed": s.get("last_changed"),
         }
 
     return state_map

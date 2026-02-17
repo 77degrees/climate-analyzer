@@ -121,6 +121,22 @@ function getPlatformColor(platform: string | null | undefined): string {
   return PLATFORM_COLORS[platform] || "#555";
 }
 
+function timeAgo(isoString: string | null | undefined): string {
+  if (!isoString) return "";
+  const then = new Date(isoString).getTime();
+  const now = Date.now();
+  const diffS = Math.floor((now - then) / 1000);
+  if (diffS < 0 || isNaN(diffS)) return "";
+  if (diffS < 60) return "just now";
+  const diffM = Math.floor(diffS / 60);
+  if (diffM < 60) return `${diffM}m ago`;
+  const diffH = Math.floor(diffM / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 30) return `${diffD}d ago`;
+  return `${Math.floor(diffD / 30)}mo ago`;
+}
+
 function getStatusColor(state: string | undefined): string {
   if (!state) return "text-muted-foreground";
   if (state === "unavailable" || state === "unknown") return "text-muted-foreground/50";
@@ -447,8 +463,8 @@ export default function Sensors() {
                 </p>
               </div>
 
-              {/* Live value */}
-              <div className="w-20 text-right">
+              {/* Live value + last seen */}
+              <div className="w-28 text-right">
                 {live?.value != null ? (
                   <p className={cn("text-sm font-semibold", getStatusColor(live?.state))}>
                     {typeof live.value === "number" ? Math.round(live.value * 10) / 10 : live.value}
@@ -457,6 +473,11 @@ export default function Sensors() {
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     {isUnavailable ? "—" : live?.state || "—"}
+                  </p>
+                )}
+                {live?.last_updated && (
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5" title={live.last_updated}>
+                    {timeAgo(live.last_updated)}
                   </p>
                 )}
               </div>
