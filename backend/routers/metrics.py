@@ -6,7 +6,7 @@ from database import get_db
 from models import Sensor, Reading, Zone
 from schemas import (
     RecoveryEvent, DutyCycleDay, MetricsSummary, EnergyProfileDay, ThermostatInfo,
-    HeatmapCell, MonthlyTrend, TempBin, SetpointPoint, AcStruggleDay,
+    HeatmapCell, MonthlyTrend, TempBin, SetpointPoint, AcStruggleDay, ZoneThermalPerf,
 )
 from services.metrics_engine import (
     compute_recovery_events,
@@ -19,6 +19,7 @@ from services.metrics_engine import (
     compute_temp_bins,
     compute_setpoint_history,
     compute_ac_struggle,
+    compute_zone_thermal_performance,
 )
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -171,6 +172,17 @@ async def get_ac_struggle(
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
     return await compute_ac_struggle(db, sid, start, end)
+
+
+@router.get("/zone-performance", response_model=list[ZoneThermalPerf])
+async def get_zone_thermal_performance(
+    days: int = Query(365, ge=30, le=730),
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-zone thermal performance on hot/cold days vs outdoor temperature."""
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+    return await compute_zone_thermal_performance(db, start, end)
 
 
 @router.get("/summary", response_model=MetricsSummary)

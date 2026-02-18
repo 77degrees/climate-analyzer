@@ -8,6 +8,7 @@ import {
   Plus,
   Trash2,
   Search,
+  Bookmark,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -23,11 +24,15 @@ import {
   createZone,
   deleteZone,
   getDbStats,
+  getAnnotations,
+  createAnnotation,
+  deleteAnnotation,
   type Settings as SettingsType,
   type Sensor,
   type Zone,
   type ConnectionTest,
   type DbStats,
+  type Annotation,
 } from "@/lib/api";
 
 export default function Settings() {
@@ -35,6 +40,7 @@ export default function Settings() {
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [haTest, setHaTest] = useState<ConnectionTest | null>(null);
   const [nwsTest, setNwsTest] = useState<ConnectionTest | null>(null);
   const [saving, setSaving] = useState(false);
@@ -46,6 +52,11 @@ export default function Settings() {
   const [nwsLon, setNwsLon] = useState("");
   const [newZoneName, setNewZoneName] = useState("");
   const [newZoneColor, setNewZoneColor] = useState("#e5a10e");
+  const [annDate, setAnnDate] = useState("");
+  const [annTime, setAnnTime] = useState("12:00");
+  const [annLabel, setAnnLabel] = useState("");
+  const [annNote, setAnnNote] = useState("");
+  const [annColor, setAnnColor] = useState("#f59e0b");
 
   useEffect(() => {
     loadAll();
@@ -53,22 +64,45 @@ export default function Settings() {
 
   const loadAll = async () => {
     try {
-      const [s, sens, z, db] = await Promise.all([
+      const [s, sens, z, db, anns] = await Promise.all([
         getSettings(),
         getSensors(),
         getZones(),
         getDbStats(),
+        getAnnotations(),
       ]);
       setSettings(s);
       setSensors(sens);
       setZones(z);
       setDbStats(db);
+      setAnnotations(anns);
       setHaUrl(s.ha_url);
       setNwsLat(String(s.nws_lat));
       setNwsLon(String(s.nws_lon));
     } catch (e) {
       console.error("Failed to load settings:", e);
     }
+  };
+
+  const handleCreateAnnotation = async () => {
+    if (!annDate || !annLabel.trim()) return;
+    await createAnnotation({
+      timestamp: new Date(`${annDate}T${annTime}:00`).toISOString(),
+      label: annLabel.trim(),
+      note: annNote.trim() || undefined,
+      color: annColor,
+    });
+    setAnnDate("");
+    setAnnLabel("");
+    setAnnNote("");
+    const anns = await getAnnotations();
+    setAnnotations(anns);
+  };
+
+  const handleDeleteAnnotation = async (id: number) => {
+    await deleteAnnotation(id);
+    const anns = await getAnnotations();
+    setAnnotations(anns);
   };
 
   const handleSaveHA = async () => {
@@ -409,6 +443,105 @@ export default function Settings() {
               )}
             </tbody>
           </table>
+        </div>
+      </Card>
+
+      {/* Annotations */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f59e0b]/10">
+            <Bookmark className="h-4 w-4 text-[#f59e0b]" />
+          </div>
+          <div>
+            <h2 className="font-display text-sm font-semibold">Chart Annotations</h2>
+            <p className="text-[10px] text-muted-foreground">Mark notable events on History charts</p>
+          </div>
+        </div>
+
+        {/* Existing annotations */}
+        {annotations.length > 0 && (
+          <div className="mb-4 space-y-1.5">
+            {annotations.map((ann) => (
+              <div
+                key={ann.id}
+                className="flex items-center gap-3 rounded-lg border border-border/30 bg-secondary/20 px-3 py-2"
+              >
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: ann.color }}
+                />
+                <span className="font-mono text-[11px] text-muted-foreground shrink-0">
+                  {new Date(ann.timestamp).toLocaleDateString([], { month: "short", day: "numeric", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <span className="flex-1 text-[12px] font-medium text-foreground truncate">{ann.label}</span>
+                {ann.note && (
+                  <span className="text-[10px] text-muted-foreground truncate max-w-[160px]">{ann.note}</span>
+                )}
+                <button
+                  onClick={() => handleDeleteAnnotation(ann.id)}
+                  className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add new annotation */}
+        <div className="space-y-3 rounded-lg border border-border/30 bg-secondary/10 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">New Annotation</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground">Date</label>
+              <input
+                type="date"
+                value={annDate}
+                onChange={(e) => setAnnDate(e.target.value)}
+                className="mt-0.5 w-full rounded-lg border border-border/50 bg-secondary/30 px-2.5 py-2 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 [color-scheme:dark]"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground">Time</label>
+              <input
+                type="time"
+                value={annTime}
+                onChange={(e) => setAnnTime(e.target.value)}
+                className="mt-0.5 w-full rounded-lg border border-border/50 bg-secondary/30 px-2.5 py-2 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 [color-scheme:dark]"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={annLabel}
+              onChange={(e) => setAnnLabel(e.target.value)}
+              placeholder="Label (e.g. Humidity sensor issue)"
+              className="flex-1 rounded-lg border border-border/50 bg-secondary/30 px-2.5 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              onKeyDown={(e) => e.key === "Enter" && handleCreateAnnotation()}
+            />
+            <input
+              type="color"
+              value={annColor}
+              onChange={(e) => setAnnColor(e.target.value)}
+              className="h-9 w-9 cursor-pointer rounded-lg border border-border/50 bg-secondary/30"
+            />
+          </div>
+          <input
+            type="text"
+            value={annNote}
+            onChange={(e) => setAnnNote(e.target.value)}
+            placeholder="Optional note"
+            className="w-full rounded-lg border border-border/50 bg-secondary/30 px-2.5 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <button
+            onClick={handleCreateAnnotation}
+            disabled={!annDate || !annLabel.trim()}
+            className={cn(btnPrimary, "flex items-center gap-2")}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Annotation
+          </button>
         </div>
       </Card>
 

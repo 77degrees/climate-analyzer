@@ -74,3 +74,13 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
+
+
+class Annotation(Base):
+    __tablename__ = "annotations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, index=True)
+    label: Mapped[str] = mapped_column(String(100))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str] = mapped_column(String(7), default="#f59e0b")

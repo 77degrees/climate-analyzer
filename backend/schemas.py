@@ -227,6 +227,42 @@ class AcStruggleDay(BaseModel):
     struggle_score: float           # 0–100 severity composite
 
 
+# ── Zone Thermal Performance ───────────────────────────────────
+
+class ZoneThermalPerf(BaseModel):
+    zone_id: int
+    zone_name: str
+    zone_color: str
+    hot_days_count: int
+    avg_temp_hot_days: float | None    # avg indoor temp on outdoor > 85°F days
+    avg_delta_hot: float | None        # avg (indoor - outdoor) on hot days; positive = runs hotter
+    cold_days_count: int
+    avg_temp_cold_days: float | None   # avg indoor temp on outdoor < 50°F days
+    avg_delta_cold: float | None       # avg (outdoor - indoor) on cold days; positive = runs colder
+    has_portable_ac: bool
+    portable_ac_days: int              # days portable AC was actively cooling
+    avg_temp_recent_7d: float | None   # avg indoor temp over last 7 days
+    avg_temp_prior_7d: float | None    # avg indoor temp over prior 7 days
+    weekly_trend: float | None         # recent_7d - prior_7d; positive = getting warmer
+
+
+# ── Annotations ───────────────────────────────────────────────
+
+class AnnotationCreate(BaseModel):
+    timestamp: datetime
+    label: str
+    note: str | None = None
+    color: str = "#f59e0b"
+
+class AnnotationOut(BaseModel):
+    id: int
+    timestamp: datetime
+    label: str
+    note: str | None
+    color: str
+    model_config = {"from_attributes": True}
+
+
 # ── DB Stats ──────────────────────────────────────────────────
 
 class DbStats(BaseModel):

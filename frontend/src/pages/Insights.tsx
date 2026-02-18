@@ -7,6 +7,10 @@ import {
   ThermometerSun,
   Clock,
   CalendarDays,
+  TrendingUp,
+  TrendingDown,
+  Wind,
+  Minus,
 } from "lucide-react";
 import {
   ComposedChart,
@@ -29,9 +33,11 @@ import {
   getAcStruggle,
   getActivityHeatmap,
   getThermostats,
+  getZoneThermalPerf,
   type AcStruggleDay,
   type HeatmapCell,
   type ThermostatInfo,
+  type ZoneThermalPerf,
 } from "@/lib/api";
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
@@ -165,6 +171,94 @@ const TimelineTooltip = ({ active, payload, label }: any) => {
   );
 };
 
+// ── Zone Perf Card ────────────────────────────────────────────────────────────
+
+function ZonePerfCard({ zone, mode }: { zone: ZoneThermalPerf; mode: "hot" | "cold" }) {
+  const delta = mode === "hot" ? zone.avg_delta_hot : zone.avg_delta_cold;
+  const avgTemp = mode === "hot" ? zone.avg_temp_hot_days : zone.avg_temp_cold_days;
+  const dayCount = mode === "hot" ? zone.hot_days_count : zone.cold_days_count;
+
+  // Severity: higher delta = struggles more
+  const severity = delta == null ? 0 : Math.min(Math.abs(delta) / 8, 1);
+  const severityColor =
+    mode === "hot"
+      ? `rgba(249,115,22,${0.1 + severity * 0.4})`   // orange
+      : `rgba(56,189,248,${0.1 + severity * 0.4})`;    // blue
+
+  const trendIcon =
+    zone.weekly_trend == null ? null :
+    zone.weekly_trend > 0.3 ? <TrendingUp className="h-3 w-3 text-[#ef4444]" /> :
+    zone.weekly_trend < -0.3 ? <TrendingDown className="h-3 w-3 text-[#22c55e]" /> :
+    <Minus className="h-3 w-3 text-muted-foreground/50" />;
+
+  const trendLabel =
+    zone.weekly_trend == null ? null :
+    zone.weekly_trend > 0.3 ? `+${zone.weekly_trend.toFixed(1)}°F vs last wk` :
+    zone.weekly_trend < -0.3 ? `${zone.weekly_trend.toFixed(1)}°F vs last wk` :
+    "Stable vs last wk";
+
+  return (
+    <div
+      className="relative rounded-xl border border-border/40 p-4 transition-all hover:border-border/70"
+      style={{ backgroundColor: severityColor }}
+    >
+      {/* Zone header */}
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="h-2.5 w-2.5 rounded-full shrink-0"
+            style={{ backgroundColor: zone.zone_color }}
+          />
+          <span className="font-display text-sm font-semibold text-foreground truncate">{zone.zone_name}</span>
+        </div>
+        {zone.has_portable_ac && (
+          <span className="shrink-0 rounded-full border border-[#34d399]/30 bg-[#34d399]/10 px-2 py-0.5 font-mono text-[9px] font-bold text-[#34d399] uppercase tracking-wider flex items-center gap-1">
+            <Wind className="h-2.5 w-2.5" />Portable AC
+          </span>
+        )}
+      </div>
+
+      {/* Main metrics */}
+      <div className="flex items-end gap-4 mb-3">
+        <div>
+          <p className="font-mono text-[10px] text-muted-foreground">Avg indoor</p>
+          <p className="font-mono text-xl font-bold text-foreground">
+            {avgTemp != null ? `${avgTemp}°F` : "—"}
+          </p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] text-muted-foreground">
+            {mode === "hot" ? "Above outdoor" : "Below outdoor"}
+          </p>
+          <p
+            className="font-mono text-lg font-semibold"
+            style={{ color: mode === "hot" ? "#f97316" : "#38bdf8" }}
+          >
+            {delta != null ? (delta > 0 ? `+${delta.toFixed(1)}°` : `${delta.toFixed(1)}°`) : "—"}
+          </p>
+        </div>
+      </div>
+
+      {/* Week trend */}
+      {trendIcon && (
+        <div className="flex items-center gap-1.5 mb-2">
+          {trendIcon}
+          <span className="font-mono text-[10px] text-muted-foreground">{trendLabel}</span>
+        </div>
+      )}
+
+      {/* Footer info */}
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground/60 font-mono">
+        <span>{dayCount} days analyzed</span>
+        {zone.has_portable_ac && zone.portable_ac_days > 0 && (
+          <span className="text-[#34d399]/70">AC ran {zone.portable_ac_days}d</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Insights() {
@@ -173,6 +267,7 @@ export default function Insights() {
   const [thermostats, setThermostats] = useState<ThermostatInfo[]>([]);
   const [struggle, setStruggle] = useState<AcStruggleDay[]>([]);
   const [heatmap, setHeatmap] = useState<HeatmapCell[]>([]);
+  const [zonePerf, setZonePerf] = useState<ZoneThermalPerf[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -182,12 +277,14 @@ export default function Insights() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [str, hm] = await Promise.all([
+      const [str, hm, zp] = await Promise.all([
         getAcStruggle(rangeDays, sensorId),
         getActivityHeatmap(90, sensorId),
+        getZoneThermalPerf(rangeDays),
       ]);
       setStruggle(str);
       setHeatmap(hm);
+      setZonePerf(zp);
     } catch (e) {
       console.error("Failed to load insights:", e);
     } finally {
@@ -731,6 +828,53 @@ export default function Insights() {
           </div>
         )}
       </Card>
+
+      {/* ── Zone Thermal Performance ───────────────────────────────────────── */}
+      {zonePerf.length > 0 && (
+        <div>
+          <div className="mb-4">
+            <h2 className="font-display text-lg font-bold tracking-tight">Zone Thermal Performance</h2>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              How each room handles extreme heat (&gt;85°F) and cold (&lt;50°F) outdoor days.
+              Zones with higher deltas struggle more to maintain comfort.
+            </p>
+          </div>
+
+          {/* Hot days ranking */}
+          {zonePerf.some((z) => z.hot_days_count > 0) && (
+            <div className="mb-4">
+              <p className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-[#f97316]/70 flex items-center gap-1.5">
+                <Flame className="h-3.5 w-3.5" /> Hot Days (&gt;85°F outdoor)
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[...zonePerf]
+                  .filter((z) => z.hot_days_count > 0)
+                  .sort((a, b) => (b.avg_delta_hot ?? -999) - (a.avg_delta_hot ?? -999))
+                  .map((zone) => (
+                    <ZonePerfCard key={zone.zone_id} zone={zone} mode="hot" />
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cold days ranking */}
+          {zonePerf.some((z) => z.cold_days_count > 0) && (
+            <div>
+              <p className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-[#38bdf8]/70 flex items-center gap-1.5">
+                <Snowflake className="h-3.5 w-3.5" /> Cold Days (&lt;50°F outdoor)
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[...zonePerf]
+                  .filter((z) => z.cold_days_count > 0)
+                  .sort((a, b) => (b.avg_delta_cold ?? -999) - (a.avg_delta_cold ?? -999))
+                  .map((zone) => (
+                    <ZonePerfCard key={zone.zone_id} zone={zone} mode="cold" />
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── No cooling data empty state ──────────────────────────────────── */}
       {!loading && struggle.length === 0 && (

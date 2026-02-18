@@ -12,12 +12,19 @@ router = APIRouter(prefix="/api/readings", tags=["readings"])
 @router.get("", response_model=list[SensorReadings])
 async def get_readings(
     hours: int = Query(24, ge=1, le=26280),
+    start: datetime | None = Query(None, description="Custom range start (ISO datetime)"),
+    end: datetime | None = Query(None, description="Custom range end (ISO datetime)"),
     sensor_ids: str | None = Query(None, description="Comma-separated sensor IDs"),
     device_class: str | None = Query(None, description="Filter by device_class (e.g. temperature, humidity)"),
     db: AsyncSession = Depends(get_db),
 ):
     """Get readings for tracked sensors within time range."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    if start and end:
+        cutoff = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+        end_time = end if end.tzinfo else end.replace(tzinfo=timezone.utc)
+    else:
+        end_time = datetime.now(timezone.utc)
+        cutoff = end_time - timedelta(hours=hours)
 
     # Get target sensors
     query = select(Sensor).where(Sensor.is_tracked == True)
@@ -37,6 +44,7 @@ async def get_readings(
                 and_(
                     Reading.sensor_id == sensor.id,
                     Reading.timestamp >= cutoff,
+                    Reading.timestamp <= end_time,
                 )
             )
             .order_by(Reading.timestamp)

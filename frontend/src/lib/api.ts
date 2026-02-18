@@ -289,3 +289,53 @@ export const getSetpointHistory = (days: number, sensorId?: number) =>
 export const getAcStruggle = (days: number, sensorId?: number) =>
   fetchJSON<AcStruggleDay[]>(`/metrics/ac-struggle?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
 
+// ── Zone thermal performance ──────────────────────────────────
+
+export interface ZoneThermalPerf {
+  zone_id: number;
+  zone_name: string;
+  zone_color: string;
+  hot_days_count: number;
+  avg_temp_hot_days: number | null;
+  avg_delta_hot: number | null;      // indoor - outdoor on hot days; positive = zone runs hotter
+  cold_days_count: number;
+  avg_temp_cold_days: number | null;
+  avg_delta_cold: number | null;     // outdoor - indoor on cold days; positive = zone runs colder
+  has_portable_ac: boolean;
+  portable_ac_days: number;
+  avg_temp_recent_7d: number | null;
+  avg_temp_prior_7d: number | null;
+  weekly_trend: number | null;       // positive = getting warmer this week vs last
+}
+
+export const getZoneThermalPerf = (days = 365) =>
+  fetchJSON<ZoneThermalPerf[]>(`/metrics/zone-performance?days=${days}`);
+
+// ── Custom date range readings ───────────────────────────────
+
+export const getReadingsRange = (start: string, end: string, deviceClass?: string) =>
+  fetchJSON<SensorReadings[]>(
+    `/readings?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${deviceClass ? `&device_class=${deviceClass}` : ""}`,
+  );
+
+export const getWeatherHistoryRange = (start: string, end: string) =>
+  fetchJSON<WeatherPoint[]>(
+    `/weather/history?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+  );
+
+// ── Annotations ──────────────────────────────────────────────
+
+export interface Annotation {
+  id: number;
+  timestamp: string;
+  label: string;
+  note: string | null;
+  color: string;
+}
+
+export const getAnnotations = () => fetchJSON<Annotation[]>("/annotations");
+export const createAnnotation = (data: { timestamp: string; label: string; note?: string; color?: string }) =>
+  fetchJSON<Annotation>("/annotations", { method: "POST", body: JSON.stringify(data) });
+export const deleteAnnotation = (id: number) =>
+  fetchJSON<void>(`/annotations/${id}`, { method: "DELETE" });
+

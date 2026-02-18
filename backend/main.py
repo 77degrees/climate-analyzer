@@ -10,7 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import settings
 from database import init_db
-from routers import sensors, readings, weather, metrics, settings as settings_router, zones, dashboard
+from routers import sensors, readings, weather, metrics, settings as settings_router, zones, dashboard, annotations
 from services.collector import collect_ha_readings, collect_nws_observation
 
 logging.basicConfig(
@@ -85,6 +85,7 @@ app.include_router(weather.router)
 app.include_router(metrics.router)
 app.include_router(settings_router.router)
 app.include_router(zones.router)
+app.include_router(annotations.router)
 
 
 @app.get("/api/health")

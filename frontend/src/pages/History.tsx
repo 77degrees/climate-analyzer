@@ -11,16 +11,21 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  ReferenceDot,
 } from "recharts";
 import { Card } from "@/components/ui/card";
-import { TimeRangeSelector } from "@/components/shared/TimeRangeSelector";
+import { DateRangeBar, type DateRange } from "@/components/shared/DateRangeBar";
 import {
   getReadings,
+  getReadingsRange,
   getWeatherHistory,
+  getWeatherHistoryRange,
   getZones,
+  getAnnotations,
   type SensorReadings,
   type WeatherPoint,
   type Zone,
+  type Annotation,
 } from "@/lib/api";
 
 const CHART_GRID = "#1a1a1a";
@@ -34,27 +39,59 @@ const TOOLTIP_STYLE = {
   boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
 };
 
+// Custom dot for annotations on line charts
+const AnnotationDot = (props: any) => {
+  const { cx, cy, payload, annotations } = props;
+  if (!cx || !cy) return null;
+  const ts = payload?._ts;
+  if (!ts) return null;
+  const ann = annotations?.find((a: Annotation) => {
+    const diff = Math.abs(new Date(a.timestamp).getTime() - new Date(ts).getTime());
+    return diff < 1000 * 60 * 30; // within 30 minutes
+  });
+  if (!ann) return null;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={5} fill={ann.color} stroke="#fff" strokeWidth={1.5} opacity={0.9} />
+      <text x={cx} y={cy - 10} textAnchor="middle" fill={ann.color} fontSize={9} fontFamily="DM Sans" fontWeight={600}>
+        {ann.label}
+      </text>
+    </g>
+  );
+};
+
 export default function History() {
-  const [hours, setHours] = useState(24);
+  const [range, setRange] = useState<DateRange>({ mode: "preset", hours: 24 });
   const [readings, setReadings] = useState<SensorReadings[]>([]);
   const [humidityReadings, setHumidityReadings] = useState<SensorReadings[]>([]);
   const [weather, setWeather] = useState<WeatherPoint[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const hours = range.mode === "preset" ? range.hours : 24; // fallback for formatTimestamp
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [r, h, w, z] = await Promise.all([
-        getReadings(hours, "temperature"),
-        getReadings(hours, "humidity"),
-        getWeatherHistory(hours),
+      const [r, h, w, z, anns] = await Promise.all([
+        range.mode === "preset"
+          ? getReadings(range.hours, "temperature")
+          : getReadingsRange(range.start, range.end, "temperature"),
+        range.mode === "preset"
+          ? getReadings(range.hours, "humidity")
+          : getReadingsRange(range.start, range.end, "humidity"),
+        range.mode === "preset"
+          ? getWeatherHistory(range.hours)
+          : getWeatherHistoryRange(range.start, range.end),
         getZones(),
+        getAnnotations(),
       ]);
       setReadings(r);
       setHumidityReadings(h);
       setWeather(w);
       setZones(z);
+      setAnnotations(anns);
     } catch (e) {
       console.error("Failed to fetch history:", e);
     } finally {
@@ -64,31 +101,38 @@ export default function History() {
 
   useEffect(() => {
     fetchData();
-  }, [hours]);
+  }, [JSON.stringify(range)]);
+
+  const displayHours =
+    range.mode === "preset"
+      ? range.hours
+      : Math.round(
+          (new Date(range.end).getTime() - new Date(range.start).getTime()) / 3600000,
+        );
 
   const zoneNameMap = new Map<number, string>();
   zones.forEach((z) => zoneNameMap.set(z.id, z.name));
 
   const zonedTemp = readings.filter((s) => s.zone_id != null);
-  const { chartPoints: tempPoints, chartLines: tempLines } = buildZoneChart(zonedTemp, zoneNameMap, hours);
+  const { chartPoints: tempPoints, chartLines: tempLines } = buildZoneChart(zonedTemp, zoneNameMap, displayHours);
 
   const zonedHumidity = humidityReadings.filter((s) => s.zone_id != null && !s.is_outdoor);
-  const { chartPoints: humidPoints, chartLines: humidLines } = buildZoneChart(zonedHumidity, zoneNameMap, hours);
+  const { chartPoints: humidPoints, chartLines: humidLines } = buildZoneChart(zonedHumidity, zoneNameMap, displayHours);
 
-  const weatherChartData = buildWeatherChart(weather, hours);
-  const hvacTimeline = buildHvacTimeline(readings, zoneNameMap, hours);
+  const weatherChartData = buildWeatherChart(weather, displayHours);
+  const hvacTimeline = buildHvacTimeline(readings, zoneNameMap, displayHours);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight">History</h1>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
             Historical sensor data & trends
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <TimeRangeSelector value={hours} onChange={setHours} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <DateRangeBar value={range} onChange={setRange} />
           <button
             onClick={fetchData}
             className="flex items-center gap-2 rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-[12px] text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
@@ -116,10 +160,30 @@ export default function History() {
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <Legend wrapperStyle={{ fontSize: 11, fontFamily: "DM Sans" }} />
                 {tempLines.filter((l) => !l.isOutdoor).map((line) => (
-                  <Line key={line.key} type="monotone" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} dot={false} connectNulls />
+                  <Line
+                    key={line.key}
+                    type="monotone"
+                    dataKey={line.key}
+                    name={line.name}
+                    stroke={line.color}
+                    strokeWidth={2}
+                    dot={<AnnotationDot annotations={annotations} />}
+                    activeDot={{ r: 4 }}
+                    connectNulls
+                  />
                 ))}
                 {tempLines.filter((l) => l.isOutdoor).map((line) => (
-                  <Line key={line.key} type="monotone" dataKey={line.key} name={line.name} stroke="#fbbf24" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls />
+                  <Line
+                    key={line.key}
+                    type="monotone"
+                    dataKey={line.key}
+                    name={line.name}
+                    stroke="#fbbf24"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    dot={false}
+                    connectNulls
+                  />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -174,7 +238,17 @@ export default function History() {
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <Legend wrapperStyle={{ fontSize: 11, fontFamily: "DM Sans" }} />
                 {humidLines.map((line) => (
-                  <Line key={line.key} type="monotone" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} dot={false} connectNulls />
+                  <Line
+                    key={line.key}
+                    type="monotone"
+                    dataKey={line.key}
+                    name={line.name}
+                    stroke={line.color}
+                    strokeWidth={2}
+                    dot={<AnnotationDot annotations={annotations} />}
+                    activeDot={{ r: 4 }}
+                    connectNulls
+                  />
                 ))}
               </LineChart>
             </ResponsiveContainer>

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from models import Reading, Sensor, WeatherObservation
+from models import Reading, Sensor, WeatherObservation, Zone
 
 logger = logging.getLogger(__name__)
 
@@ -547,6 +547,170 @@ async def compute_ac_struggle(
             "avg_overshoot": avg_ov,
             "struggle_hours": struggle_hours,
             "struggle_score": struggle_score,
+        })
+
+    return result_list
+
+
+async def compute_zone_thermal_performance(
+    db: AsyncSession,
+    start: datetime,
+    end: datetime,
+    hot_threshold: float = 85.0,
+    cold_threshold: float = 50.0,
+) -> list[dict]:
+    """Per-zone thermal analysis: how well does each zone maintain temp on extreme-weather days."""
+
+    # Get all zones and their indoor temp sensors
+    zone_sensor_result = await db.execute(
+        select(Zone, Sensor)
+        .join(Sensor, Sensor.zone_id == Zone.id)
+        .where(
+            and_(
+                Sensor.is_tracked == True,
+                Sensor.is_outdoor == False,
+                Sensor.device_class == "temperature",
+            )
+        )
+        .order_by(Zone.sort_order, Zone.name)
+    )
+    rows = zone_sensor_result.all()
+
+    # Group sensor IDs by zone
+    zone_meta: dict[int, dict] = {}
+    for zone, sensor in rows:
+        if zone.id not in zone_meta:
+            zone_meta[zone.id] = {
+                "zone_id": zone.id,
+                "zone_name": zone.name,
+                "zone_color": zone.color,
+                "sensor_ids": [],
+                "portable_sensor_ids": [],
+                "has_portable_ac": False,
+            }
+        zone_meta[zone.id]["sensor_ids"].append(sensor.id)
+
+    if not zone_meta:
+        return []
+
+    # Find portable ACs (LG ThinQ) per zone
+    pac_result = await db.execute(
+        select(Sensor).where(
+            and_(
+                Sensor.domain == "climate",
+                Sensor.is_tracked == True,
+                Sensor.zone_id.in_(list(zone_meta.keys())),
+                Sensor.platform == "lg_thinq",
+            )
+        )
+    )
+    for s in pac_result.scalars().all():
+        if s.zone_id in zone_meta:
+            zone_meta[s.zone_id]["has_portable_ac"] = True
+            zone_meta[s.zone_id]["portable_sensor_ids"].append(s.id)
+
+    # Daily outdoor avg from tracked outdoor sensors
+    outdoor_result = await db.execute(
+        select(
+            func.strftime("%Y-%m-%d", Reading.timestamp).label("day"),
+            func.avg(Reading.value).label("avg_temp"),
+        )
+        .join(Sensor, Reading.sensor_id == Sensor.id)
+        .where(
+            and_(
+                Sensor.is_tracked == True,
+                Sensor.is_outdoor == True,
+                Sensor.device_class == "temperature",
+                Reading.timestamp >= start,
+                Reading.timestamp <= end,
+                Reading.value > 0,
+                Reading.value < 130,
+            )
+        )
+        .group_by(func.strftime("%Y-%m-%d", Reading.timestamp))
+    )
+    outdoor_daily = {row.day: round(row.avg_temp, 1) for row in outdoor_result}
+
+    hot_days = {d for d, t in outdoor_daily.items() if t >= hot_threshold}
+    cold_days = {d for d, t in outdoor_daily.items() if t <= cold_threshold}
+
+    result_list = []
+    for zone_id, meta in zone_meta.items():
+        # Daily avg indoor temp for this zone
+        indoor_result = await db.execute(
+            select(
+                func.strftime("%Y-%m-%d", Reading.timestamp).label("day"),
+                func.avg(Reading.value).label("avg_temp"),
+            )
+            .where(
+                and_(
+                    Reading.sensor_id.in_(meta["sensor_ids"]),
+                    Reading.timestamp >= start,
+                    Reading.timestamp <= end,
+                    Reading.value > 30,
+                    Reading.value < 110,
+                )
+            )
+            .group_by(func.strftime("%Y-%m-%d", Reading.timestamp))
+        )
+        indoor_daily = {row.day: round(row.avg_temp, 1) for row in indoor_result}
+
+        # Portable AC active days (was actively cooling)
+        pac_days: set[str] = set()
+        for pid in meta["portable_sensor_ids"]:
+            pac_q = await db.execute(
+                select(func.strftime("%Y-%m-%d", Reading.timestamp).label("day"))
+                .where(
+                    and_(
+                        Reading.sensor_id == pid,
+                        Reading.timestamp >= start,
+                        Reading.timestamp <= end,
+                        Reading.hvac_action == "cooling",
+                    )
+                )
+                .distinct()
+            )
+            for row in pac_q:
+                pac_days.add(row.day)
+
+        # Hot day stats
+        hot_temps, hot_deltas = [], []
+        for day in hot_days:
+            if day in indoor_daily and day in outdoor_daily:
+                hot_temps.append(indoor_daily[day])
+                hot_deltas.append(indoor_daily[day] - outdoor_daily[day])
+
+        # Cold day stats
+        cold_temps, cold_deltas = [], []
+        for day in cold_days:
+            if day in indoor_daily and day in outdoor_daily:
+                cold_temps.append(indoor_daily[day])
+                cold_deltas.append(outdoor_daily[day] - indoor_daily[day])
+
+        # Week-over-week trend: compare last 7 days vs prior 7 days within the range
+        sorted_days = sorted(indoor_daily.keys())
+        recent_7 = sorted_days[-7:] if len(sorted_days) >= 7 else sorted_days
+        prior_7 = sorted_days[-14:-7] if len(sorted_days) >= 14 else []
+
+        avg_recent = round(sum(indoor_daily[d] for d in recent_7) / len(recent_7), 1) if recent_7 else None
+        avg_prior = round(sum(indoor_daily[d] for d in prior_7) / len(prior_7), 1) if prior_7 else None
+        weekly_trend = round(avg_recent - avg_prior, 1) if avg_recent is not None and avg_prior is not None else None
+
+        result_list.append({
+            "zone_id": zone_id,
+            "zone_name": meta["zone_name"],
+            "zone_color": meta["zone_color"],
+            "hot_days_count": len(hot_temps),
+            "avg_temp_hot_days": round(sum(hot_temps) / len(hot_temps), 1) if hot_temps else None,
+            "avg_delta_hot": round(sum(hot_deltas) / len(hot_deltas), 1) if hot_deltas else None,
+            "cold_days_count": len(cold_temps),
+            "avg_temp_cold_days": round(sum(cold_temps) / len(cold_temps), 1) if cold_temps else None,
+            "avg_delta_cold": round(sum(cold_deltas) / len(cold_deltas), 1) if cold_deltas else None,
+            "has_portable_ac": meta["has_portable_ac"],
+            "portable_ac_days": len(pac_days),
+            "avg_temp_recent_7d": avg_recent,
+            "avg_temp_prior_7d": avg_prior,
+            "weekly_trend": weekly_trend,
         })
 
     return result_list
