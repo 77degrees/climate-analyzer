@@ -245,6 +245,207 @@ async def compute_energy_profile(
     return profile
 
 
+async def compute_activity_heatmap(
+    db: AsyncSession,
+    sensor_id: int,
+    start: datetime,
+    end: datetime,
+) -> list[dict]:
+    """Build a 7×24 heatmap of HVAC activity by day-of-week and hour."""
+    result = await db.execute(
+        select(Reading)
+        .where(
+            and_(
+                Reading.sensor_id == sensor_id,
+                Reading.timestamp >= start,
+                Reading.timestamp <= end,
+                Reading.hvac_action.isnot(None),
+            )
+        )
+        .order_by(Reading.timestamp)
+    )
+    readings = result.scalars().all()
+
+    # Grid: [day_of_week][hour] = {heating, cooling, total}
+    grid: dict[tuple[int, int], dict] = {}
+    for r in readings:
+        # Use local time (CST = UTC-6)
+        local_ts = r.timestamp.replace(tzinfo=None) - timedelta(hours=6)
+        dow = local_ts.weekday()  # 0=Mon, 6=Sun
+        hour = local_ts.hour
+        key = (dow, hour)
+        if key not in grid:
+            grid[key] = {"heating": 0, "cooling": 0, "total": 0}
+        action = r.hvac_action or "idle"
+        if action == "heating":
+            grid[key]["heating"] += 1
+        elif action == "cooling":
+            grid[key]["cooling"] += 1
+        grid[key]["total"] += 1
+
+    cells = []
+    for (dow, hour), counts in grid.items():
+        total = counts["total"] or 1
+        cells.append({
+            "day_of_week": dow,
+            "hour": hour,
+            "heating_pct": round(counts["heating"] / total * 100, 1),
+            "cooling_pct": round(counts["cooling"] / total * 100, 1),
+            "active_pct": round((counts["heating"] + counts["cooling"]) / total * 100, 1),
+            "sample_count": counts["total"],
+        })
+    return cells
+
+
+async def compute_monthly_trends(
+    db: AsyncSession,
+    sensor_id: int,
+    start: datetime,
+    end: datetime,
+) -> list[dict]:
+    """Monthly aggregation of HVAC runtime hours and outdoor temp."""
+    result = await db.execute(
+        select(Reading)
+        .where(
+            and_(
+                Reading.sensor_id == sensor_id,
+                Reading.timestamp >= start,
+                Reading.timestamp <= end,
+                Reading.hvac_action.isnot(None),
+            )
+        )
+        .order_by(Reading.timestamp)
+    )
+    readings = result.scalars().all()
+
+    months: dict[str, dict] = {}
+    for r in readings:
+        month = r.timestamp.strftime("%Y-%m")
+        if month not in months:
+            months[month] = {"heating": 0, "cooling": 0, "total": 0, "days": set()}
+        action = r.hvac_action or "off"
+        if action == "heating":
+            months[month]["heating"] += 1
+        elif action == "cooling":
+            months[month]["cooling"] += 1
+        months[month]["total"] += 1
+        months[month]["days"].add(r.timestamp.strftime("%Y-%m-%d"))
+
+    # Get monthly avg outdoor temps
+    weather_result = await db.execute(
+        select(
+            func.strftime("%Y-%m", WeatherObservation.timestamp).label("month"),
+            func.avg(WeatherObservation.temperature).label("avg_temp"),
+        )
+        .where(
+            and_(
+                WeatherObservation.timestamp >= start,
+                WeatherObservation.timestamp <= end,
+                WeatherObservation.temperature.isnot(None),
+            )
+        )
+        .group_by(func.strftime("%Y-%m", WeatherObservation.timestamp))
+    )
+    outdoor_temps = {row.month: round(row.avg_temp, 1) for row in weather_result}
+
+    result_list = []
+    for month, counts in sorted(months.items()):
+        total = counts["total"] or 1
+        # 5-min samples → hours (12 samples/hr)
+        heating_h = round(counts["heating"] / 12, 1)
+        cooling_h = round(counts["cooling"] / 12, 1)
+        result_list.append({
+            "month": month,
+            "heating_hours": heating_h,
+            "cooling_hours": cooling_h,
+            "total_runtime_hours": round(heating_h + cooling_h, 1),
+            "avg_outdoor_temp": outdoor_temps.get(month),
+            "sample_days": len(counts["days"]),
+        })
+    return result_list
+
+
+async def compute_temp_bins(
+    db: AsyncSession,
+    sensor_id: int,
+    start: datetime,
+    end: datetime,
+    bin_size: float = 5.0,
+) -> list[dict]:
+    """Bin outdoor daily avg temp and sum HVAC runtime per bin."""
+    # Get daily energy profile (reuse existing logic)
+    profile = await compute_energy_profile(db, sensor_id, start, end)
+
+    bins: dict[float, dict] = {}
+    for day in profile:
+        temp = day.get("outdoor_avg_temp")
+        if temp is None:
+            continue
+        bin_floor = (temp // bin_size) * bin_size
+        if bin_floor not in bins:
+            bins[bin_floor] = {"heating": 0.0, "cooling": 0.0, "days": 0}
+        bins[bin_floor]["heating"] += day["heating_hours"]
+        bins[bin_floor]["cooling"] += day["cooling_hours"]
+        bins[bin_floor]["days"] += 1
+
+    result_list = []
+    for bin_floor in sorted(bins.keys()):
+        b = bins[bin_floor]
+        result_list.append({
+            "range_label": f"{int(bin_floor)}\u2013{int(bin_floor + bin_size)}\u00b0F",
+            "min_temp": bin_floor,
+            "max_temp": bin_floor + bin_size,
+            "heating_hours": round(b["heating"], 1),
+            "cooling_hours": round(b["cooling"], 1),
+            "day_count": b["days"],
+        })
+    return result_list
+
+
+async def compute_setpoint_history(
+    db: AsyncSession,
+    sensor_id: int,
+    start: datetime,
+    end: datetime,
+) -> list[dict]:
+    """Extract setpoint changes over time (only emit when value changes)."""
+    result = await db.execute(
+        select(Reading)
+        .where(
+            and_(
+                Reading.sensor_id == sensor_id,
+                Reading.timestamp >= start,
+                Reading.timestamp <= end,
+                Reading.hvac_action.isnot(None),
+            )
+        )
+        .order_by(Reading.timestamp)
+    )
+    readings = result.scalars().all()
+
+    points = []
+    last_heat: float | None = None
+    last_cool: float | None = None
+
+    for r in readings:
+        heat_changed = r.setpoint_heat is not None and r.setpoint_heat != last_heat
+        cool_changed = r.setpoint_cool is not None and r.setpoint_cool != last_cool
+
+        if heat_changed or cool_changed or not points:
+            points.append({
+                "timestamp": r.timestamp,
+                "setpoint_heat": r.setpoint_heat,
+                "setpoint_cool": r.setpoint_cool,
+                "hvac_action": r.hvac_action,
+            })
+            if r.setpoint_heat is not None:
+                last_heat = r.setpoint_heat
+            if r.setpoint_cool is not None:
+                last_cool = r.setpoint_cool
+
+    return points
+
+
 async def compute_efficiency_score(
     avg_recovery_min: float,
     hold_efficiency: float,

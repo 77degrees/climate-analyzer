@@ -183,6 +183,39 @@ class DashboardData(BaseModel):
     zone_cards: list[ZoneCard]
 
 
+# ── Insights ──────────────────────────────────────────────────
+
+class HeatmapCell(BaseModel):
+    day_of_week: int   # 0=Mon, 6=Sun
+    hour: int          # 0-23
+    heating_pct: float
+    cooling_pct: float
+    active_pct: float  # heating + cooling combined
+    sample_count: int
+
+class MonthlyTrend(BaseModel):
+    month: str         # "2024-01"
+    heating_hours: float
+    cooling_hours: float
+    total_runtime_hours: float
+    avg_outdoor_temp: float | None
+    sample_days: int   # days with data in this month
+
+class TempBin(BaseModel):
+    range_label: str   # "65–70°F"
+    min_temp: float
+    max_temp: float
+    heating_hours: float
+    cooling_hours: float
+    day_count: int     # number of days contributing to this bin
+
+class SetpointPoint(BaseModel):
+    timestamp: datetime
+    setpoint_heat: float | None
+    setpoint_cool: float | None
+    hvac_action: str | None
+
+
 # ── DB Stats ──────────────────────────────────────────────────
 
 class DbStats(BaseModel):

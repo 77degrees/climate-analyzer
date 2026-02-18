@@ -228,3 +228,51 @@ export const getMetricsSummary = (days: number, sensorId?: number) =>
 export const getEnergyProfile = (days: number, sensorId?: number) =>
   fetchJSON<EnergyProfileDay[]>(`/metrics/energy-profile?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
 export const getThermostats = () => fetchJSON<ThermostatInfo[]>("/metrics/thermostats");
+
+// ── Insights types ────────────────────────────────────────────
+
+export interface HeatmapCell {
+  day_of_week: number;   // 0=Mon, 6=Sun
+  hour: number;          // 0-23
+  heating_pct: number;
+  cooling_pct: number;
+  active_pct: number;
+  sample_count: number;
+}
+
+export interface MonthlyTrend {
+  month: string;          // "2024-01"
+  heating_hours: number;
+  cooling_hours: number;
+  total_runtime_hours: number;
+  avg_outdoor_temp: number | null;
+  sample_days: number;
+}
+
+export interface TempBin {
+  range_label: string;    // "65–70°F"
+  min_temp: number;
+  max_temp: number;
+  heating_hours: number;
+  cooling_hours: number;
+  day_count: number;
+}
+
+export interface SetpointPoint {
+  timestamp: string;
+  setpoint_heat: number | null;
+  setpoint_cool: number | null;
+  hvac_action: string | null;
+}
+
+// ── Insights API calls ────────────────────────────────────────
+
+export const getActivityHeatmap = (days: number, sensorId?: number) =>
+  fetchJSON<HeatmapCell[]>(`/metrics/heatmap?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+export const getMonthlyTrends = (months: number, sensorId?: number) =>
+  fetchJSON<MonthlyTrend[]>(`/metrics/monthly?months=${months}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+export const getTempBins = (days: number, sensorId?: number) =>
+  fetchJSON<TempBin[]>(`/metrics/temp-bins?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+export const getSetpointHistory = (days: number, sensorId?: number) =>
+  fetchJSON<SetpointPoint[]>(`/metrics/setpoints?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+

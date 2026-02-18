@@ -4,13 +4,20 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import Sensor, Reading, Zone
-from schemas import RecoveryEvent, DutyCycleDay, MetricsSummary, EnergyProfileDay, ThermostatInfo
+from schemas import (
+    RecoveryEvent, DutyCycleDay, MetricsSummary, EnergyProfileDay, ThermostatInfo,
+    HeatmapCell, MonthlyTrend, TempBin, SetpointPoint,
+)
 from services.metrics_engine import (
     compute_recovery_events,
     compute_duty_cycle,
     compute_hold_efficiency,
     compute_efficiency_score,
     compute_energy_profile,
+    compute_activity_heatmap,
+    compute_monthly_trends,
+    compute_temp_bins,
+    compute_setpoint_history,
 )
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -88,6 +95,66 @@ async def get_energy_profile(
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
     return await compute_energy_profile(db, sid, start, end)
+
+
+@router.get("/heatmap", response_model=list[HeatmapCell])
+async def get_activity_heatmap(
+    days: int = Query(90, ge=7, le=730),
+    sensor_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """7×24 activity heatmap: fraction of time HVAC heating/cooling per hour-of-day × weekday."""
+    sid = await _get_climate_sensor_id(db, sensor_id)
+    if not sid:
+        return []
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+    return await compute_activity_heatmap(db, sid, start, end)
+
+
+@router.get("/monthly", response_model=list[MonthlyTrend])
+async def get_monthly_trends(
+    months: int = Query(24, ge=1, le=36),
+    sensor_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Monthly aggregation of heating/cooling runtime hours and avg outdoor temp."""
+    sid = await _get_climate_sensor_id(db, sensor_id)
+    if not sid:
+        return []
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=months * 31)
+    return await compute_monthly_trends(db, sid, start, end)
+
+
+@router.get("/temp-bins", response_model=list[TempBin])
+async def get_temp_bins(
+    days: int = Query(365, ge=30, le=730),
+    sensor_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """HVAC runtime hours grouped by 5°F outdoor temperature bins."""
+    sid = await _get_climate_sensor_id(db, sensor_id)
+    if not sid:
+        return []
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+    return await compute_temp_bins(db, sid, start, end)
+
+
+@router.get("/setpoints", response_model=list[SetpointPoint])
+async def get_setpoint_history(
+    days: int = Query(30, ge=1, le=730),
+    sensor_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Setpoint changes over time — only emits when heat or cool setpoint changes."""
+    sid = await _get_climate_sensor_id(db, sensor_id)
+    if not sid:
+        return []
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+    return await compute_setpoint_history(db, sid, start, end)
 
 
 @router.get("/summary", response_model=MetricsSummary)
