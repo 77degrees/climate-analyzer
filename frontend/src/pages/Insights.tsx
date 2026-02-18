@@ -232,33 +232,64 @@ function ZonePerfCard({ zone, mode }: { zone: ZoneThermalPerf; mode: "hot" | "co
             {avgTemp != null ? `${avgTemp}°F` : "—"}
           </p>
         </div>
-        <div>
-          {mode === "hot" ? (
-            <>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {delta != null && delta < 0 ? "Below outdoor ✓" : "Above outdoor ⚠"}
-              </p>
-              <p
-                className="font-mono text-lg font-semibold"
-                style={{ color: delta != null && delta < 0 ? "#22c55e" : "#f97316" }}
-              >
-                {delta != null ? (delta > 0 ? `+${delta.toFixed(1)}°` : `${Math.abs(delta).toFixed(1)}°`) : "—"}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {delta != null && delta < 0 ? "Above outdoor ⚠" : "Below outdoor ✓"}
-              </p>
-              <p
-                className="font-mono text-lg font-semibold"
-                style={{ color: delta != null && delta < 0 ? "#f97316" : "#38bdf8" }}
-              >
-                {delta != null ? `${Math.abs(delta).toFixed(1)}°` : "—"}
-              </p>
-            </>
-          )}
-        </div>
+
+        {/* vs setpoint (primary) — only on hot days if setpoint available */}
+        {mode === "hot" && zone.avg_overshoot_hot != null ? (
+          <div>
+            <p className="font-mono text-[10px] text-muted-foreground">
+              vs setpoint ({zone.avg_setpoint_hot}°)
+            </p>
+            <p
+              className="font-mono text-lg font-semibold"
+              style={{
+                color: zone.avg_overshoot_hot <= 0 ? "#22c55e"
+                  : zone.avg_overshoot_hot < 1.5 ? "#84cc16"
+                  : zone.avg_overshoot_hot < 3 ? "#f59e0b"
+                  : "#ef4444",
+              }}
+            >
+              {zone.avg_overshoot_hot > 0 ? "+" : ""}{zone.avg_overshoot_hot.toFixed(1)}°F
+            </p>
+          </div>
+        ) : (
+          <div>
+            {mode === "hot" ? (
+              <>
+                <p className="font-mono text-[10px] text-muted-foreground">
+                  {delta != null && delta < 0 ? "Below outdoor ✓" : "Above outdoor ⚠"}
+                </p>
+                <p
+                  className="font-mono text-lg font-semibold"
+                  style={{ color: delta != null && delta < 0 ? "#22c55e" : "#f97316" }}
+                >
+                  {delta != null ? (delta > 0 ? `+${delta.toFixed(1)}°` : `${Math.abs(delta).toFixed(1)}°`) : "—"}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-mono text-[10px] text-muted-foreground">
+                  {delta != null && delta < 0 ? "Above outdoor ⚠" : "Below outdoor ✓"}
+                </p>
+                <p
+                  className="font-mono text-lg font-semibold"
+                  style={{ color: delta != null && delta < 0 ? "#f97316" : "#38bdf8" }}
+                >
+                  {delta != null ? `${Math.abs(delta).toFixed(1)}°` : "—"}
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* vs outdoor (secondary, always shown on hot days) */}
+        {mode === "hot" && delta != null && zone.avg_overshoot_hot != null && (
+          <div className="opacity-60">
+            <p className="font-mono text-[10px] text-muted-foreground">vs outdoor</p>
+            <p className="font-mono text-sm font-medium text-muted-foreground">
+              {delta < 0 ? `${Math.abs(delta).toFixed(1)}° below` : `+${delta.toFixed(1)}° above`}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Week trend */}
@@ -883,7 +914,12 @@ export default function Insights() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {[...zonePerf]
                   .filter((z) => z.hot_days_count > 0)
-                  .sort((a, b) => (b.avg_delta_hot ?? -999) - (a.avg_delta_hot ?? -999))
+                  .sort((a, b) => {
+                    // Sort by setpoint overshoot first (worst first), fall back to outdoor delta
+                    const aScore = a.avg_overshoot_hot ?? (a.avg_delta_hot ?? -999);
+                    const bScore = b.avg_overshoot_hot ?? (b.avg_delta_hot ?? -999);
+                    return bScore - aScore;
+                  })
                   .map((zone) => (
                     <ZonePerfCard key={zone.zone_id} zone={zone} mode="hot" />
                   ))}

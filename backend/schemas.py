@@ -265,6 +265,8 @@ class ZoneThermalPerf(BaseModel):
     hot_days_count: int
     avg_temp_hot_days: float | None    # avg indoor temp on outdoor > 85°F days
     avg_delta_hot: float | None        # avg (indoor - outdoor) on hot days; positive = runs hotter
+    avg_setpoint_hot: float | None     # avg cooling setpoint on hot days (from thermostat in zone)
+    avg_overshoot_hot: float | None    # avg (indoor - setpoint) on hot days; positive = above target
     cold_days_count: int
     avg_temp_cold_days: float | None   # avg indoor temp on outdoor < 50°F days
     avg_delta_cold: float | None       # avg (outdoor - indoor) on cold days; positive = runs colder

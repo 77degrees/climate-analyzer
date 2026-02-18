@@ -585,10 +585,25 @@ async def compute_zone_thermal_performance(
                 "zone_name": zone.name,
                 "zone_color": zone.color,
                 "sensor_ids": [],
+                "climate_sensor_ids": [],  # for setpoint queries
                 "portable_sensor_ids": [],
                 "has_portable_ac": False,
             }
         zone_meta[zone.id]["sensor_ids"].append(sensor.id)
+
+    # Also collect climate (thermostat) sensors per zone for setpoint data
+    climate_result = await db.execute(
+        select(Sensor).where(
+            and_(
+                Sensor.domain == "climate",
+                Sensor.is_tracked == True,
+                Sensor.zone_id.in_(list(zone_meta.keys())),
+            )
+        )
+    )
+    for s in climate_result.scalars().all():
+        if s.zone_id in zone_meta:
+            zone_meta[s.zone_id]["climate_sensor_ids"].append(s.id)
 
     if not zone_meta:
         return []
@@ -673,12 +688,43 @@ async def compute_zone_thermal_performance(
             for row in pac_q:
                 pac_days.add(row.day)
 
+        # Daily avg setpoint_cool from climate sensors in this zone
+        setpoint_daily: dict[str, float] = {}
+        if meta["climate_sensor_ids"]:
+            sp_result = await db.execute(
+                select(
+                    func.strftime("%Y-%m-%d", Reading.timestamp).label("day"),
+                    func.avg(Reading.setpoint_cool).label("avg_setpoint"),
+                )
+                .where(
+                    and_(
+                        Reading.sensor_id.in_(meta["climate_sensor_ids"]),
+                        Reading.timestamp >= start,
+                        Reading.timestamp <= end,
+                        Reading.setpoint_cool.isnot(None),
+                        Reading.setpoint_cool > 50,
+                        Reading.setpoint_cool < 90,
+                    )
+                )
+                .group_by(func.strftime("%Y-%m-%d", Reading.timestamp))
+            )
+            setpoint_daily = {row.day: round(row.avg_setpoint, 1) for row in sp_result}
+
         # Hot day stats
-        hot_temps, hot_deltas = [], []
+        hot_temps, hot_deltas, hot_setpoints = [], [], []
         for day in hot_days:
             if day in indoor_daily and day in outdoor_daily:
                 hot_temps.append(indoor_daily[day])
                 hot_deltas.append(indoor_daily[day] - outdoor_daily[day])
+                if day in setpoint_daily:
+                    hot_setpoints.append(setpoint_daily[day])
+
+        avg_setpoint_hot = round(sum(hot_setpoints) / len(hot_setpoints), 1) if hot_setpoints else None
+        avg_overshoot_hot = (
+            round(sum(hot_temps) / len(hot_temps) - avg_setpoint_hot, 1)
+            if avg_setpoint_hot is not None and hot_temps
+            else None
+        )
 
         # Cold day stats
         cold_temps, cold_deltas = [], []
@@ -703,6 +749,8 @@ async def compute_zone_thermal_performance(
             "hot_days_count": len(hot_temps),
             "avg_temp_hot_days": round(sum(hot_temps) / len(hot_temps), 1) if hot_temps else None,
             "avg_delta_hot": round(sum(hot_deltas) / len(hot_deltas), 1) if hot_deltas else None,
+            "avg_setpoint_hot": avg_setpoint_hot,
+            "avg_overshoot_hot": avg_overshoot_hot,
             "cold_days_count": len(cold_temps),
             "avg_temp_cold_days": round(sum(cold_temps) / len(cold_temps), 1) if cold_temps else None,
             "avg_delta_cold": round(sum(cold_deltas) / len(cold_deltas), 1) if cold_deltas else None,

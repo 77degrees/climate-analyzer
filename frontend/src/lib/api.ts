@@ -326,6 +326,8 @@ export interface ZoneThermalPerf {
   hot_days_count: number;
   avg_temp_hot_days: number | null;
   avg_delta_hot: number | null;      // indoor - outdoor on hot days; positive = zone runs hotter
+  avg_setpoint_hot: number | null;   // avg cooling setpoint on hot days
+  avg_overshoot_hot: number | null;  // avg (indoor - setpoint) on hot days; positive = above target
   cold_days_count: number;
   avg_temp_cold_days: number | null;
   avg_delta_cold: number | null;     // outdoor - indoor on cold days; positive = zone runs colder
