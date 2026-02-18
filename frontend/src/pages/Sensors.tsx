@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Search,
   RefreshCw,
@@ -12,21 +12,12 @@ import {
   Home,
   Plus,
   Trash2,
-  LayoutGrid,
-  List,
 } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  ResponsiveContainer,
-  YAxis,
-} from "recharts";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   getSensorsWithZones,
   getLiveStates,
-  getReadings,
   updateSensor,
   discoverSensors,
   getZones,
@@ -35,126 +26,32 @@ import {
   type SensorWithZone,
   type LiveState,
   type Zone,
-  type SensorReadings,
-  type ReadingPoint,
 } from "@/lib/api";
 
-// ── Types ────────────────────────────────────────────────────
+type FilterCategory = "all" | "climate" | "temperature" | "humidity" | "air_quality" | "pressure" | "other";
 
-type FilterCategory =
-  | "all"
-  | "climate"
-  | "temperature"
-  | "humidity"
-  | "air_quality"
-  | "pressure"
-  | "other";
-
-type ViewMode = "compare" | "manage";
-
-// ── Constants ────────────────────────────────────────────────
-
-const CATEGORY_FILTERS: Record<
-  FilterCategory,
-  { label: string; match: (s: SensorWithZone) => boolean }
-> = {
+const CATEGORY_FILTERS: Record<FilterCategory, { label: string; match: (s: SensorWithZone) => boolean }> = {
   all: { label: "All", match: () => true },
   climate: { label: "HVAC / Climate", match: (s) => s.domain === "climate" },
-  temperature: {
-    label: "Temperature",
-    match: (s) => s.device_class === "temperature" && s.domain === "sensor",
-  },
-  humidity: {
-    label: "Humidity",
-    match: (s) => s.device_class === "humidity",
-  },
+  temperature: { label: "Temperature", match: (s) => s.device_class === "temperature" && s.domain === "sensor" },
+  humidity: { label: "Humidity", match: (s) => s.device_class === "humidity" },
   air_quality: {
     label: "Air Quality",
     match: (s) =>
-      [
-        "aqi",
-        "carbon_dioxide",
-        "carbon_monoxide",
-        "pm1",
-        "pm25",
-        "pm10",
-        "pm100",
-        "volatile_organic_compounds",
-        "volatile_organic_compounds_parts",
-        "nitrogen_dioxide",
-        "ozone",
-        "sulphur_dioxide",
-      ].includes(s.device_class || "") || s.domain === "air_quality",
+      ["aqi", "carbon_dioxide", "carbon_monoxide", "pm1", "pm25", "pm10", "pm100",
+        "volatile_organic_compounds", "volatile_organic_compounds_parts",
+        "nitrogen_dioxide", "ozone", "sulphur_dioxide"].includes(s.device_class || "")
+      || s.domain === "air_quality",
   },
   pressure: {
     label: "Pressure / Wind",
-    match: (s) =>
-      ["atmospheric_pressure", "pressure", "wind_speed", "dewpoint"].includes(
-        s.device_class || "",
-      ),
+    match: (s) => ["atmospheric_pressure", "pressure", "wind_speed", "dewpoint"].includes(s.device_class || ""),
   },
   other: {
     label: "Other",
     match: (s) => s.domain === "weather" || s.domain === "fan",
   },
 };
-
-// Compare-view groups (ordered, exclusive)
-const COMPARE_GROUPS = [
-  {
-    key: "hvac",
-    label: "HVAC / Thermostats",
-    icon: Thermometer,
-    accentColor: "#e5a10e",
-    match: (s: SensorWithZone) => s.domain === "climate",
-  },
-  {
-    key: "temperature",
-    label: "Temperature Sensors",
-    icon: Thermometer,
-    accentColor: "#f97316",
-    match: (s: SensorWithZone) =>
-      s.device_class === "temperature" && s.domain === "sensor",
-  },
-  {
-    key: "humidity",
-    label: "Humidity Sensors",
-    icon: Droplets,
-    accentColor: "#34d399",
-    match: (s: SensorWithZone) => s.device_class === "humidity",
-  },
-  {
-    key: "co2",
-    label: "CO₂ & Air Quality",
-    icon: Wind,
-    accentColor: "#a78bfa",
-    match: (s: SensorWithZone) =>
-      [
-        "carbon_dioxide",
-        "aqi",
-        "pm1",
-        "pm25",
-        "pm10",
-        "pm100",
-        "volatile_organic_compounds",
-        "volatile_organic_compounds_parts",
-        "nitrogen_dioxide",
-        "ozone",
-        "sulphur_dioxide",
-        "carbon_monoxide",
-      ].includes(s.device_class || "") || s.domain === "air_quality",
-  },
-  {
-    key: "pressure",
-    label: "Pressure & Wind",
-    icon: Gauge,
-    accentColor: "#38bdf8",
-    match: (s: SensorWithZone) =>
-      ["atmospheric_pressure", "pressure", "wind_speed", "dewpoint"].includes(
-        s.device_class || "",
-      ),
-  },
-];
 
 const DEVICE_CLASS_ICONS: Record<string, typeof Thermometer> = {
   temperature: Thermometer,
@@ -168,13 +65,13 @@ const DEVICE_CLASS_ICONS: Record<string, typeof Thermometer> = {
 
 const PLATFORM_LABELS: Record<string, string> = {
   nest: "Nest",
-  badnest: "Nest",
+  badnest: "Nest (Custom)",
   ecobee: "Ecobee",
   switchbot: "SwitchBot",
   switchbot_cloud: "SwitchBot",
   tuya: "Tuya",
   mqtt: "MQTT",
-  zha: "Zigbee",
+  zha: "Zigbee (ZHA)",
   zwave_js: "Z-Wave",
   homekit_controller: "HomeKit",
   smartthings: "SmartThings",
@@ -205,7 +102,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   zha: "#FFB300",
   esphome: "#01A9DB",
   eight_sleep: "#1E88E5",
-  homekit_controller: "#888",
+  homekit_controller: "#999",
   smartthings: "#15BEF0",
   smartthinq_sensors: "#A50034",
   vesync: "#00C853",
@@ -213,8 +110,6 @@ const PLATFORM_COLORS: Record<string, string> = {
   weatherdotcom: "#2196F3",
   met: "#2979FF",
 };
-
-// ── Helpers ───────────────────────────────────────────────────
 
 function getPlatformLabel(platform: string | null | undefined): string {
   if (!platform) return "";
@@ -242,312 +137,31 @@ function timeAgo(isoString: string | null | undefined): string {
   return `${Math.floor(diffD / 30)}mo ago`;
 }
 
+function getStatusColor(state: string | undefined): string {
+  if (!state) return "text-muted-foreground";
+  if (state === "unavailable" || state === "unknown") return "text-muted-foreground/50";
+  return "text-foreground";
+}
+
 function getActionBadge(action: string | null) {
   if (!action) return null;
   const colors: Record<string, string> = {
-    heating: "bg-orange-500/90",
-    cooling: "bg-sky-400/90",
-    idle: "bg-neutral-500/70",
-    off: "bg-neutral-700/70",
+    heating: "bg-orange-500",
+    cooling: "bg-sky-400",
+    idle: "bg-neutral-500",
+    off: "bg-neutral-700",
   };
   return (
-    <span
-      className={cn(
-        "rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-white",
-        colors[action] || "bg-neutral-600/80",
-      )}
-    >
+    <span className={cn("rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white", colors[action] || "bg-neutral-600")}>
       {action}
     </span>
   );
 }
 
-// ── Sparkline ─────────────────────────────────────────────────
-
-function Sparkline({
-  readings,
-  color = "#e5a10e",
-  height = 44,
-}: {
-  readings: ReadingPoint[];
-  color?: string;
-  height?: number;
-}) {
-  const valid = readings.filter((r) => r.value != null);
-  if (!valid.length) {
-    return (
-      <div
-        className="flex items-center justify-center opacity-15"
-        style={{ height }}
-      >
-        <div className="h-px w-full bg-current rounded-full" />
-      </div>
-    );
-  }
-
-  // Downsample to ~60 points
-  const N = Math.max(1, Math.ceil(valid.length / 60));
-  const points = valid
-    .filter((_, i) => i % N === 0)
-    .map((r) => ({ v: r.value as number }));
-
-  const vals = points.map((p) => p.v);
-  const lo = Math.min(...vals);
-  const hi = Math.max(...vals);
-  const pad = Math.max((hi - lo) * 0.15, 0.3);
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={points} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-        <YAxis domain={[lo - pad, hi + pad]} hide />
-        <Line
-          type="monotone"
-          dataKey="v"
-          stroke={color}
-          dot={false}
-          strokeWidth={1.5}
-          isAnimationActive={false}
-          strokeOpacity={0.8}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
-// ── Compare Card ──────────────────────────────────────────────
-
-function SensorCompareCard({
-  sensor,
-  live,
-  readings,
-  isHvac,
-}: {
-  sensor: SensorWithZone;
-  live: LiveState | undefined;
-  readings: ReadingPoint[];
-  isHvac: boolean;
-}) {
-  const isUnavailable =
-    live?.state === "unavailable" || live?.state === "unknown";
-  const platformColor = getPlatformColor(sensor.platform);
-  const platformLabel = getPlatformLabel(sensor.platform);
-
-  const displayValue =
-    live?.value != null
-      ? `${Math.round(live.value * 10) / 10}${sensor.unit ? " " + sensor.unit : ""}`
-      : isUnavailable
-        ? "—"
-        : live?.state || "—";
-
-  return (
-    <div
-      className={cn(
-        "glass-card flex flex-col gap-0 overflow-hidden transition-all duration-200 hover:border-white/[0.1]",
-        isUnavailable && "opacity-40",
-      )}
-    >
-      {/* Top bar with platform badge */}
-      <div
-        className="flex items-center justify-between px-3 pt-3 pb-0"
-      >
-        <div className="min-w-0 flex-1 mr-2">
-          <p className="truncate text-[13px] font-semibold leading-tight text-foreground">
-            {sensor.friendly_name}
-          </p>
-          <p className="truncate font-mono text-[9px] text-muted-foreground/50 mt-0.5">
-            {sensor.entity_id}
-          </p>
-        </div>
-        {platformLabel && (
-          <span
-            className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-            style={{
-              backgroundColor: platformColor + "20",
-              color: platformColor,
-              border: `1px solid ${platformColor}30`,
-            }}
-          >
-            {platformLabel}
-          </span>
-        )}
-      </div>
-
-      {/* Zone */}
-      {sensor.zone_name && (
-        <div className="flex items-center gap-1.5 px-3 mt-1.5">
-          <div
-            className="h-1.5 w-1.5 rounded-full"
-            style={{ backgroundColor: sensor.zone_color || "#e5a10e" }}
-          />
-          <span className="text-[10px] text-muted-foreground">
-            {sensor.zone_name}
-          </span>
-          {sensor.is_outdoor && (
-            <span className="ml-1 text-[9px] text-muted-foreground/60 font-mono uppercase">
-              outdoor
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Value + HVAC action */}
-      <div className="flex items-baseline gap-2 px-3 mt-2">
-        <span
-          className={cn(
-            "font-mono text-xl font-bold tabular-nums",
-            isUnavailable ? "text-muted-foreground/40" : "text-foreground",
-          )}
-        >
-          {displayValue}
-        </span>
-        {isHvac && live?.hvac_action && getActionBadge(live.hvac_action)}
-      </div>
-
-      {/* Setpoints for thermostats */}
-      {isHvac && (live?.hvac_mode || live?.hvac_action) && (
-        <div className="px-3 mt-0.5">
-          <span className="font-mono text-[9px] text-muted-foreground/50 uppercase tracking-wide">
-            {live?.hvac_mode || ""}
-          </span>
-        </div>
-      )}
-
-      {/* Sparkline */}
-      <div className="px-3 mt-2 mb-0">
-        <Sparkline
-          readings={readings}
-          color={sensor.zone_color || platformColor || "#e5a10e"}
-          height={44}
-        />
-      </div>
-
-      {/* Footer */}
-      <div className="px-3 pb-3 pt-1">
-        {live?.last_updated ? (
-          <p className="font-mono text-[9px] text-muted-foreground/40">
-            {timeAgo(live.last_updated)}
-          </p>
-        ) : (
-          <p className="font-mono text-[9px] text-muted-foreground/30">
-            no live data
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Compare View ──────────────────────────────────────────────
-
-interface CompareGroup {
-  key: string;
-  label: string;
-  icon: React.ElementType;
-  accentColor: string;
-  match: (s: SensorWithZone) => boolean;
-  sensors: SensorWithZone[];
-}
-
-function CompareView({
-  sensors,
-  liveStates,
-  readingsMap,
-}: {
-  sensors: SensorWithZone[];
-  liveStates: Record<string, LiveState>;
-  readingsMap: Map<number, ReadingPoint[]>;
-}) {
-  const trackedSensors = sensors.filter((s) => s.is_tracked);
-
-  const groups = useMemo(() => {
-    const assigned = new Set<number>();
-    const result: CompareGroup[] = [];
-
-    for (const group of COMPARE_GROUPS) {
-      const matched = trackedSensors.filter(
-        (s) => !assigned.has(s.id) && group.match(s),
-      );
-      matched.forEach((s) => assigned.add(s.id));
-      if (matched.length > 0) {
-        result.push({ ...group, sensors: matched });
-      }
-    }
-
-    // Catch-all "Other" for anything not yet assigned
-    const rest = trackedSensors.filter((s) => !assigned.has(s.id));
-    if (rest.length > 0) {
-      result.push({
-        key: "other",
-        label: "Other Sensors",
-        icon: Eye,
-        accentColor: "#6b7280",
-        match: () => true,
-        sensors: rest,
-      });
-    }
-
-    return result;
-  }, [trackedSensors]);
-
-  if (!trackedSensors.length) {
-    return (
-      <div className="py-20 text-center text-sm text-muted-foreground">
-        No tracked sensors. Enable tracking on sensors in the Manage tab.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-8">
-      {groups.map((group) => {
-        const GroupIcon = group.icon;
-        return (
-          <section key={group.key}>
-            {/* Group header */}
-            <div className="mb-3 flex items-center gap-2.5">
-              <div
-                className="flex h-6 w-6 items-center justify-center rounded-md"
-                style={{ backgroundColor: group.accentColor + "20" }}
-              >
-                <GroupIcon
-                  className="h-3.5 w-3.5"
-                  style={{ color: group.accentColor }}
-                />
-              </div>
-              <h2 className="font-display text-[13px] font-semibold tracking-tight text-foreground">
-                {group.label}
-              </h2>
-              <span className="font-mono text-[10px] text-muted-foreground/50">
-                {group.sensors.length}
-              </span>
-            </div>
-
-            {/* Card grid */}
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-              {group.sensors.map((sensor) => (
-                <SensorCompareCard
-                  key={sensor.id}
-                  sensor={sensor}
-                  live={liveStates[sensor.entity_id]}
-                  readings={readingsMap.get(sensor.id) ?? []}
-                  isHvac={group.key === "hvac"}
-                />
-              ))}
-            </div>
-          </section>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Main Page ─────────────────────────────────────────────────
-
 export default function Sensors() {
   const [sensors, setSensors] = useState<SensorWithZone[]>([]);
   const [liveStates, setLiveStates] = useState<Record<string, LiveState>>({});
   const [zones, setZones] = useState<Zone[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>("compare");
   const [filter, setFilter] = useState<FilterCategory>("all");
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -556,16 +170,6 @@ export default function Sensors() {
   const [newZoneName, setNewZoneName] = useState("");
   const [newZoneColor, setNewZoneColor] = useState("#e5a10e");
   const [showZonePanel, setShowZonePanel] = useState(false);
-  const [readingsData, setReadingsData] = useState<SensorReadings[]>([]);
-  const [readingsLoading, setReadingsLoading] = useState(false);
-
-  const readingsMap = useMemo(() => {
-    const m = new Map<number, ReadingPoint[]>();
-    for (const sr of readingsData) {
-      m.set(sr.sensor_id, sr.readings);
-    }
-    return m;
-  }, [readingsData]);
 
   const loadData = async () => {
     setLoading(true);
@@ -585,27 +189,9 @@ export default function Sensors() {
     }
   };
 
-  const loadReadings = async () => {
-    setReadingsLoading(true);
-    try {
-      const data = await getReadings(24);
-      setReadingsData(data);
-    } catch (e) {
-      console.error("Failed to load readings:", e);
-    } finally {
-      setReadingsLoading(false);
-    }
-  };
-
   useEffect(() => {
     loadData();
   }, []);
-
-  useEffect(() => {
-    if (viewMode === "compare") {
-      loadReadings();
-    }
-  }, [viewMode]);
 
   const handleDiscover = async () => {
     setDiscovering(true);
@@ -620,10 +206,7 @@ export default function Sensors() {
     }
   };
 
-  const handleSensorUpdate = async (
-    id: number,
-    updates: Partial<SensorWithZone>,
-  ) => {
+  const handleSensorUpdate = async (id: number, updates: Partial<SensorWithZone>) => {
     await updateSensor(id, updates);
     const s = await getSensorsWithZones();
     setSensors(s);
@@ -647,17 +230,14 @@ export default function Sensors() {
 
   const platforms = useMemo(() => {
     const p = new Set<string>();
-    sensors.forEach((s) => {
-      if (s.platform) p.add(s.platform);
-    });
+    sensors.forEach((s) => { if (s.platform) p.add(s.platform); });
     return Array.from(p).sort();
   }, [sensors]);
 
   const filtered = useMemo(() => {
     return sensors.filter((s) => {
       if (!CATEGORY_FILTERS[filter].match(s)) return false;
-      if (platformFilter !== "all" && s.platform !== platformFilter)
-        return false;
+      if (platformFilter !== "all" && s.platform !== platformFilter) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
@@ -684,409 +264,286 @@ export default function Sensors() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">
-            Sensors
-          </h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Sensors</h1>
           <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-            {sensors.length} entities &middot; {trackedCount} tracked &middot;{" "}
-            {outdoorCount} outdoor
+            {sensors.length} entities &middot; {trackedCount} tracked &middot; {outdoorCount} outdoor
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* View mode toggle */}
-          <div className="flex rounded-lg border border-border/40 bg-secondary/20 p-0.5">
-            <button
-              onClick={() => setViewMode("compare")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200",
-                viewMode === "compare"
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <LayoutGrid className="h-3 w-3" />
-              Compare
-            </button>
-            <button
-              onClick={() => setViewMode("manage")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200",
-                viewMode === "manage"
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <List className="h-3 w-3" />
-              Manage
-            </button>
-          </div>
-
-          {viewMode === "manage" && (
-            <>
-              <button
-                onClick={() => setShowZonePanel(!showZonePanel)}
-                className="rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-[12px] font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
-              >
-                Zones ({zones.length})
-              </button>
-              <button
-                onClick={handleDiscover}
-                disabled={discovering}
-                className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
-                <Search
-                  className={cn("h-3.5 w-3.5", discovering && "animate-spin")}
-                />
-                Re-Discover
-              </button>
-            </>
-          )}
-
           <button
-            onClick={() => {
-              loadData();
-              if (viewMode === "compare") loadReadings();
-            }}
+            onClick={() => setShowZonePanel(!showZonePanel)}
+            className="rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-[12px] font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
+          >
+            Zones ({zones.length})
+          </button>
+          <button
+            onClick={handleDiscover}
+            disabled={discovering}
+            className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            <Search className={cn("h-3.5 w-3.5", discovering && "animate-spin")} />
+            Re-Discover
+          </button>
+          <button
+            onClick={loadData}
             className="rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
           >
-            <RefreshCw
-              className={cn(
-                "h-3.5 w-3.5",
-                (loading || readingsLoading) && "animate-spin",
-              )}
-            />
+            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           </button>
         </div>
       </div>
 
-      {/* Compare View */}
-      {viewMode === "compare" && (
-        <CompareView
-          sensors={sensors}
-          liveStates={liveStates}
-          readingsMap={readingsMap}
-        />
-      )}
-
-      {/* Manage View */}
-      {viewMode === "manage" && (
-        <>
-          {/* Zone Management Panel */}
-          {showZonePanel && (
-            <Card className="p-5">
-              <h2 className="mb-3 text-sm font-semibold">Zones</h2>
-              <div className="flex flex-wrap gap-2 mb-3">
-                {zones.map((zone) => (
-                  <div
-                    key={zone.id}
-                    className="flex items-center gap-2 rounded-lg border border-border/40 bg-secondary/20 px-3 py-1.5"
-                  >
-                    <div
-                      className="h-2.5 w-2.5 rounded-full ring-1 ring-white/10"
-                      style={{ backgroundColor: zone.color }}
-                    />
-                    <span className="text-[13px] font-medium">{zone.name}</span>
-                    <button
-                      onClick={() => handleDeleteZone(zone.id)}
-                      className="text-muted-foreground hover:text-destructive ml-1 transition-colors"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newZoneName}
-                  onChange={(e) => setNewZoneName(e.target.value)}
-                  placeholder="New zone (e.g. Upstairs, Downstairs, Master Bedroom)"
-                  className="flex-1 rounded-lg border border-border/50 bg-secondary/30 px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateZone()}
-                />
-                <input
-                  type="color"
-                  value={newZoneColor}
-                  onChange={(e) => setNewZoneColor(e.target.value)}
-                  className="h-9 w-9 cursor-pointer rounded-lg border border-border/50 bg-secondary/30"
-                />
-                <button
-                  onClick={handleCreateZone}
-                  className="rounded-lg bg-primary px-3 py-2 text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90"
-                >
-                  <Plus className="h-4 w-4" />
+      {/* Zone Management Panel */}
+      {showZonePanel && (
+        <Card className="p-5">
+          <h2 className="mb-3 text-sm font-semibold">Zones</h2>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {zones.map((zone) => (
+              <div
+                key={zone.id}
+                className="flex items-center gap-2 rounded-lg border border-border/40 bg-secondary/20 px-3 py-1.5"
+              >
+                <div className="h-2.5 w-2.5 rounded-full ring-1 ring-white/10" style={{ backgroundColor: zone.color }} />
+                <span className="text-[13px] font-medium">{zone.name}</span>
+                <button onClick={() => handleDeleteZone(zone.id)} className="text-muted-foreground hover:text-destructive ml-1 transition-colors">
+                  <Trash2 className="h-3 w-3" />
                 </button>
               </div>
-            </Card>
-          )}
-
-          {/* Filter tabs */}
-          <div className="flex gap-0.5 overflow-x-auto rounded-lg border border-border/40 bg-secondary/20 p-1">
-            {(
-              Object.entries(CATEGORY_FILTERS) as [
-                FilterCategory,
-                (typeof CATEGORY_FILTERS)["all"],
-              ][]
-            ).map(([key, { label }]) => (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                className={cn(
-                  "whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200",
-                  filter === key
-                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-                <span className="ml-1.5 font-mono opacity-50">
-                  {counts[key]}
-                </span>
-              </button>
             ))}
           </div>
-
-          {/* Integration filter */}
-          {platforms.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                onClick={() => setPlatformFilter("all")}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-                  platformFilter === "all"
-                    ? "bg-foreground/10 text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                All integrations
-              </button>
-              {platforms.map((p) => (
-                <button
-                  key={p}
-                  onClick={() =>
-                    setPlatformFilter(platformFilter === p ? "all" : p)
-                  }
-                  className={cn(
-                    "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-                    platformFilter === p
-                      ? "text-white"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  style={
-                    platformFilter === p
-                      ? { backgroundColor: getPlatformColor(p) }
-                      : undefined
-                  }
-                >
-                  <span
-                    className="inline-block h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: getPlatformColor(p) }}
-                  />
-                  {getPlatformLabel(p)}
-                  <span className="font-mono opacity-50">
-                    {sensors.filter((s) => s.platform === p).length}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+          <div className="flex gap-2">
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, entity ID, or device class..."
-              className="w-full rounded-lg border border-border/50 bg-secondary/30 py-2.5 pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 transition-colors"
+              value={newZoneName}
+              onChange={(e) => setNewZoneName(e.target.value)}
+              placeholder="New zone (e.g. Upstairs, Downstairs, Master Bedroom)"
+              className="flex-1 rounded-lg border border-border/50 bg-secondary/30 px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              onKeyDown={(e) => e.key === "Enter" && handleCreateZone()}
             />
+            <input
+              type="color"
+              value={newZoneColor}
+              onChange={(e) => setNewZoneColor(e.target.value)}
+              className="h-9 w-9 cursor-pointer rounded-lg border border-border/50 bg-secondary/30"
+            />
+            <button onClick={handleCreateZone} className="rounded-lg bg-primary px-3 py-2 text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90">
+              <Plus className="h-4 w-4" />
+            </button>
           </div>
-
-          {/* Sensor list */}
-          <div className="space-y-2">
-            {filtered.map((sensor) => {
-              const live = liveStates[sensor.entity_id];
-              const isUnavailable =
-                live?.state === "unavailable" || live?.state === "unknown";
-              const Icon =
-                DEVICE_CLASS_ICONS[sensor.device_class || ""] || Thermometer;
-
-              return (
-                <div
-                  key={sensor.id}
-                  className={cn(
-                    "glass-card flex items-center gap-4 px-4 py-3 transition-all duration-200 hover:border-white/[0.1]",
-                    isUnavailable && "opacity-40",
-                  )}
-                >
-                  {/* Icon + Info */}
-                  <div
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                    style={{
-                      backgroundColor: `${sensor.zone_color || "#e5a10e"}15`,
-                    }}
-                  >
-                    <Icon
-                      className="h-4 w-4"
-                      style={{ color: sensor.zone_color || "#e5a10e" }}
-                    />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-[13px] font-semibold text-foreground">
-                        {sensor.friendly_name}
-                      </p>
-                      {isUnavailable && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                          UNAVAILABLE
-                        </span>
-                      )}
-                      {live?.hvac_action && getActionBadge(live.hvac_action)}
-                    </div>
-                    <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                      <span className="truncate">{sensor.entity_id}</span>
-                      <span>&middot;</span>
-                      <span>
-                        {sensor.domain}/{sensor.device_class || "\u2014"}
-                      </span>
-                      {sensor.platform && (
-                        <>
-                          <span>&middot;</span>
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                            style={{
-                              backgroundColor:
-                                getPlatformColor(sensor.platform) + "15",
-                              color: getPlatformColor(sensor.platform),
-                            }}
-                          >
-                            {getPlatformLabel(sensor.platform)}
-                          </span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-
-                  {/* Live value + last seen */}
-                  <div className="w-28 text-right">
-                    {live?.value != null ? (
-                      <p className="font-mono text-sm font-semibold text-foreground">
-                        {typeof live.value === "number"
-                          ? Math.round(live.value * 10) / 10
-                          : live.value}
-                        {live.unit ? (
-                          <span className="text-[10px] text-muted-foreground ml-0.5">
-                            {live.unit}
-                          </span>
-                        ) : null}
-                      </p>
-                    ) : (
-                      <p className="font-mono text-[11px] text-muted-foreground">
-                        {isUnavailable ? "\u2014" : live?.state || "\u2014"}
-                      </p>
-                    )}
-                    {live?.last_updated && (
-                      <p
-                        className="font-mono text-[10px] text-muted-foreground/50 mt-0.5"
-                        title={live.last_updated}
-                      >
-                        {timeAgo(live.last_updated)}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Zone selector */}
-                  <div className="w-36">
-                    <select
-                      value={sensor.zone_id ?? ""}
-                      onChange={(e) =>
-                        handleSensorUpdate(sensor.id, {
-                          zone_id: e.target.value
-                            ? Number(e.target.value)
-                            : null,
-                        })
-                      }
-                      className="w-full rounded-md border border-border/50 bg-secondary/30 px-2 py-1.5 text-[11px] text-foreground"
-                    >
-                      <option value="">No zone</option>
-                      {zones.map((z) => (
-                        <option key={z.id} value={z.id}>
-                          {z.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Outdoor toggle */}
-                  <button
-                    onClick={() =>
-                      handleSensorUpdate(sensor.id, {
-                        is_outdoor: !sensor.is_outdoor,
-                      })
-                    }
-                    title={
-                      sensor.is_outdoor
-                        ? "Outdoor sensor"
-                        : "Indoor sensor"
-                    }
-                    className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-200",
-                      sensor.is_outdoor
-                        ? "border-[#fbbf24]/30 bg-[#fbbf24]/10 text-[#fbbf24]"
-                        : "border-border/40 text-muted-foreground hover:text-foreground hover:border-border",
-                    )}
-                  >
-                    {sensor.is_outdoor ? (
-                      <TreePine className="h-3.5 w-3.5" />
-                    ) : (
-                      <Home className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-
-                  {/* Track toggle */}
-                  <button
-                    onClick={() =>
-                      handleSensorUpdate(sensor.id, {
-                        is_tracked: !sensor.is_tracked,
-                      })
-                    }
-                    title={
-                      sensor.is_tracked
-                        ? "Tracking (click to stop)"
-                        : "Not tracked (click to track)"
-                    }
-                    className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-200",
-                      sensor.is_tracked
-                        ? "border-primary/30 bg-primary/10 text-primary"
-                        : "border-border/40 text-muted-foreground hover:text-foreground hover:border-border",
-                    )}
-                  >
-                    {sensor.is_tracked ? (
-                      <Eye className="h-3.5 w-3.5" />
-                    ) : (
-                      <EyeOff className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                </div>
-              );
-            })}
-
-            {filtered.length === 0 && !loading && (
-              <div className="py-12 text-center text-sm text-muted-foreground">
-                {sensors.length === 0
-                  ? "No sensors discovered yet. Click Re-Discover to scan Home Assistant."
-                  : "No sensors match your filter."}
-              </div>
-            )}
-          </div>
-        </>
+        </Card>
       )}
+
+      {/* Filter tabs */}
+      <div className="flex gap-0.5 overflow-x-auto rounded-lg border border-border/40 bg-secondary/20 p-1">
+        {(Object.entries(CATEGORY_FILTERS) as [FilterCategory, typeof CATEGORY_FILTERS.all][]).map(
+          ([key, { label }]) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={cn(
+                "whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200",
+                filter === key
+                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+              <span className="ml-1.5 font-mono opacity-50">{counts[key]}</span>
+            </button>
+          ),
+        )}
+      </div>
+
+      {/* Integration filter */}
+      {platforms.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setPlatformFilter("all")}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+              platformFilter === "all"
+                ? "bg-foreground/10 text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            All integrations
+          </button>
+          {platforms.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPlatformFilter(platformFilter === p ? "all" : p)}
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                platformFilter === p
+                  ? "text-white"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              style={platformFilter === p ? { backgroundColor: getPlatformColor(p) } : undefined}
+            >
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: getPlatformColor(p) }}
+              />
+              {getPlatformLabel(p)}
+              <span className="font-mono opacity-50">
+                {sensors.filter((s) => s.platform === p).length}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by name, entity ID, or device class..."
+          className="w-full rounded-lg border border-border/50 bg-secondary/30 py-2.5 pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 transition-colors"
+        />
+      </div>
+
+      {/* Sensor list */}
+      <div className="space-y-2">
+        {filtered.map((sensor) => {
+          const live = liveStates[sensor.entity_id];
+          const isUnavailable = live?.state === "unavailable" || live?.state === "unknown";
+          const Icon = DEVICE_CLASS_ICONS[sensor.device_class || ""] || Thermometer;
+
+          return (
+            <div
+              key={sensor.id}
+              className={cn(
+                "glass-card flex items-center gap-4 px-4 py-3 transition-all duration-200 hover:border-white/[0.1]",
+                isUnavailable && "opacity-40",
+              )}
+            >
+              {/* Icon + Info */}
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                style={{ backgroundColor: `${sensor.zone_color || "#e5a10e"}15` }}
+              >
+                <Icon
+                  className="h-4 w-4"
+                  style={{ color: sensor.zone_color || "#e5a10e" }}
+                />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-[13px] font-semibold text-foreground">
+                    {sensor.friendly_name}
+                  </p>
+                  {isUnavailable && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      UNAVAILABLE
+                    </span>
+                  )}
+                  {live?.hvac_action && getActionBadge(live.hvac_action)}
+                </div>
+                <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                  <span className="truncate">{sensor.entity_id}</span>
+                  <span>&middot;</span>
+                  <span>{sensor.domain}/{sensor.device_class || "\u2014"}</span>
+                  {sensor.platform && (
+                    <>
+                      <span>&middot;</span>
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                        style={{
+                          backgroundColor: getPlatformColor(sensor.platform) + "15",
+                          color: getPlatformColor(sensor.platform),
+                        }}
+                      >
+                        {getPlatformLabel(sensor.platform)}
+                      </span>
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {/* Live value + last seen */}
+              <div className="w-28 text-right">
+                {live?.value != null ? (
+                  <p className={cn("font-mono text-sm font-semibold", getStatusColor(live?.state))}>
+                    {typeof live.value === "number" ? Math.round(live.value * 10) / 10 : live.value}
+                    {live.unit ? <span className="text-[10px] text-muted-foreground ml-0.5">{live.unit}</span> : null}
+                  </p>
+                ) : (
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    {isUnavailable ? "\u2014" : live?.state || "\u2014"}
+                  </p>
+                )}
+                {live?.last_updated && (
+                  <p className="font-mono text-[10px] text-muted-foreground/50 mt-0.5" title={live.last_updated}>
+                    {timeAgo(live.last_updated)}
+                  </p>
+                )}
+              </div>
+
+              {/* Zone selector */}
+              <div className="w-36">
+                <select
+                  value={sensor.zone_id ?? ""}
+                  onChange={(e) =>
+                    handleSensorUpdate(sensor.id, {
+                      zone_id: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="w-full rounded-md border border-border/50 bg-secondary/30 px-2 py-1.5 text-[11px] text-foreground"
+                >
+                  <option value="">No zone</option>
+                  {zones.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Outdoor toggle */}
+              <button
+                onClick={() => handleSensorUpdate(sensor.id, { is_outdoor: !sensor.is_outdoor })}
+                title={sensor.is_outdoor ? "Outdoor sensor" : "Indoor sensor"}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-200",
+                  sensor.is_outdoor
+                    ? "border-[#fbbf24]/30 bg-[#fbbf24]/10 text-[#fbbf24]"
+                    : "border-border/40 text-muted-foreground hover:text-foreground hover:border-border",
+                )}
+              >
+                {sensor.is_outdoor ? <TreePine className="h-3.5 w-3.5" /> : <Home className="h-3.5 w-3.5" />}
+              </button>
+
+              {/* Track toggle */}
+              <button
+                onClick={() => handleSensorUpdate(sensor.id, { is_tracked: !sensor.is_tracked })}
+                title={sensor.is_tracked ? "Tracking (click to stop)" : "Not tracked (click to track)"}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-200",
+                  sensor.is_tracked
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-border/40 text-muted-foreground hover:text-foreground hover:border-border",
+                )}
+              >
+                {sensor.is_tracked ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          );
+        })}
+
+        {filtered.length === 0 && !loading && (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            {sensors.length === 0
+              ? "No sensors discovered yet. Click Re-Discover to scan Home Assistant."
+              : "No sensors match your filter."}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
