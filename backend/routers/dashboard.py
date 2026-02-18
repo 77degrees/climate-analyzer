@@ -177,13 +177,14 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
             last_seen=r.timestamp if r else None,
         ))
 
-    # Power / energy sensors
+    # Power sensors — only LG ThinQ portable A/C units (relevant to HVAC overview)
     power_q = await db.execute(
         select(Sensor).where(
             and_(
                 Sensor.domain == "sensor",
-                Sensor.device_class.in_(["power", "energy"]),
+                Sensor.device_class == "power",
                 Sensor.is_tracked == True,
+                Sensor.platform == "smartthinq_sensors",
             )
         ).order_by(Sensor.friendly_name)
     )
