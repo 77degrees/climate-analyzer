@@ -52,6 +52,10 @@ class HAClient:
 
     async def get_climate_entities(self) -> list[dict]:
         """Filter states to all climate/environment-relevant entities."""
+        return await self.get_all_relevant_states()
+
+    async def get_all_relevant_states(self) -> list[dict]:
+        """Filter states to climate, environment, moisture, and power entities."""
         states = await self.get_states()
         relevant = []
         for state in states:
@@ -63,7 +67,11 @@ class HAClient:
                 relevant.append(state)
             elif domain == "sensor":
                 dc = attrs.get("device_class", "")
-                if dc in self.CLIMATE_DEVICE_CLASSES:
+                if dc in self.CLIMATE_DEVICE_CLASSES or dc in ("power", "energy"):
+                    relevant.append(state)
+            elif domain == "binary_sensor":
+                dc = attrs.get("device_class", "")
+                if dc == "moisture":
                     relevant.append(state)
             elif domain in ("weather", "air_quality", "fan"):
                 relevant.append(state)

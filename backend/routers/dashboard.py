@@ -3,7 +3,7 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import Sensor, Reading, WeatherObservation, Zone
-from schemas import DashboardData, DashboardStats, HvacStatus, ZoneCard
+from schemas import DashboardData, DashboardStats, HvacStatus, ZoneCard, WaterLeakStatus, PowerSensorReading
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -151,8 +151,62 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
             hvac_action=zone_hvac_action,
         ))
 
+    # Water leak sensors (binary_sensor with device_class=moisture)
+    moisture_q = await db.execute(
+        select(Sensor).where(
+            and_(
+                Sensor.domain == "binary_sensor",
+                Sensor.device_class == "moisture",
+                Sensor.is_tracked == True,
+            )
+        )
+    )
+    water_leaks = []
+    for sensor in moisture_q.scalars().all():
+        latest_q = await db.execute(
+            select(Reading)
+            .where(Reading.sensor_id == sensor.id)
+            .order_by(Reading.timestamp.desc())
+            .limit(1)
+        )
+        r = latest_q.scalar_one_or_none()
+        water_leaks.append(WaterLeakStatus(
+            entity_id=sensor.entity_id,
+            friendly_name=sensor.friendly_name,
+            is_wet=bool(r and r.value == 1.0),
+            last_seen=r.timestamp if r else None,
+        ))
+
+    # Power / energy sensors
+    power_q = await db.execute(
+        select(Sensor).where(
+            and_(
+                Sensor.domain == "sensor",
+                Sensor.device_class.in_(["power", "energy"]),
+                Sensor.is_tracked == True,
+            )
+        ).order_by(Sensor.friendly_name)
+    )
+    power_sensors = []
+    for sensor in power_q.scalars().all():
+        latest_q = await db.execute(
+            select(Reading)
+            .where(Reading.sensor_id == sensor.id)
+            .order_by(Reading.timestamp.desc())
+            .limit(1)
+        )
+        r = latest_q.scalar_one_or_none()
+        power_sensors.append(PowerSensorReading(
+            entity_id=sensor.entity_id,
+            friendly_name=sensor.friendly_name,
+            value=r.value if r else None,
+            unit=sensor.unit,
+        ))
+
     return DashboardData(
         stats=stats,
         hvac_statuses=hvac_statuses,
         zone_cards=zone_cards,
+        water_leaks=water_leaks,
+        power_sensors=power_sensors,
     )

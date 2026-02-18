@@ -31,8 +31,10 @@ def pa_to_inhg(pa: float | None) -> float | None:
 class NWSClient:
     """National Weather Service API client."""
 
-    async def resolve_station(self, lat: float, lon: float) -> str:
-        """Resolve lat/lon to nearest observation station ID."""
+    async def resolve_station(self, lat: float, lon: float) -> tuple[str, str | None]:
+        """Resolve lat/lon to nearest observation station ID.
+        Returns (station_id, forecast_url).
+        """
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 f"{NWS_BASE}/points/{lat},{lon}",
@@ -40,14 +42,39 @@ class NWSClient:
             )
             resp.raise_for_status()
             data = resp.json()
-            stations_url = data["properties"]["observationStations"]
+            props = data["properties"]
+            stations_url = props["observationStations"]
+            forecast_url = props.get("forecast")
 
             resp2 = await client.get(stations_url, headers=NWS_HEADERS)
             resp2.raise_for_status()
             stations = resp2.json()
             station_id = stations["features"][0]["properties"]["stationIdentifier"]
-            logger.info(f"Resolved NWS station: {station_id}")
-            return station_id
+            logger.info(f"Resolved NWS station: {station_id}, forecast: {forecast_url}")
+            return station_id, forecast_url
+
+    async def get_forecast_periods(self, forecast_url: str) -> list[dict]:
+        """Fetch NWS gridpoint forecast and return simplified period list."""
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(forecast_url, headers=NWS_HEADERS)
+            if resp.status_code == 404:
+                return []
+            resp.raise_for_status()
+            data = resp.json()
+            periods = data.get("properties", {}).get("periods", [])
+            result = []
+            for p in periods[:7]:  # next 7 periods (3-4 days)
+                result.append({
+                    "name": p.get("name", ""),
+                    "temperature": p.get("temperature"),
+                    "temperature_unit": p.get("temperatureUnit", "F"),
+                    "short_forecast": p.get("shortForecast", ""),
+                    "wind_speed": p.get("windSpeed", ""),
+                    "wind_direction": p.get("windDirection", ""),
+                    "is_daytime": p.get("isDaytime", True),
+                    "icon": p.get("icon", ""),
+                })
+            return result
 
     async def get_latest_observation(self, station_id: str) -> dict | None:
         """Get latest weather observation from a station."""

@@ -886,6 +886,128 @@ export default function Insights() {
           </p>
         </div>
       )}
+
+      {/* ── Leander TX Seasonal Lawn Care ───────────────────────────────── */}
+      <LawnCareSection />
+    </div>
+  );
+}
+
+// ── Leander TX Lawn Care Tips ─────────────────────────────────────────────────
+
+interface LawnTip {
+  months: number[];  // 1=Jan … 12=Dec
+  category: "mow" | "water" | "fertilize" | "treat" | "overseed";
+  tip: string;
+}
+
+const LAWN_TIPS: LawnTip[] = [
+  // Watering
+  { months: [4, 5], category: "water", tip: "Begin watering 1–2×/wk as temps rise. Target 1\" per week." },
+  { months: [6, 7, 8], category: "water", tip: "Water 2–3×/wk in early morning. Avoid watering mid-day — evaporation loss >50% in 100°F+ heat." },
+  { months: [9, 10], category: "water", tip: "Taper to 1×/wk as highs drop below 90°F. Let grass harden for dormancy." },
+  { months: [11, 12, 1, 2], category: "water", tip: "Water only if no rain for 3+ weeks during dormancy. Overwatering dormant grass invites fungus." },
+  { months: [3], category: "water", tip: "Resume watering as green-up begins. Wait until grass is actively growing." },
+  // Mowing
+  { months: [3, 4], category: "mow", tip: "First mow at 2.5\" once grass is 3–4\" tall. Scalping while still dormant stresses roots." },
+  { months: [5, 6, 7, 8, 9], category: "mow", tip: "Mow St. Augustine at 3.5–4\" to shade roots and reduce heat stress. Never remove >1/3 at once." },
+  { months: [10, 11], category: "mow", tip: "Last mow of season at 3–3.5\" going into dormancy. Taller = better cold protection." },
+  // Fertilizing
+  { months: [4], category: "fertilize", tip: "Apply 15-5-10 or similar slow-release after green-up (soil ≥65°F). Leander's clay holds nutrients well." },
+  { months: [6, 7], category: "fertilize", tip: "Light summer feed with 32-0-10 or similar. Avoid high-nitrogen in heat — can burn stressed grass." },
+  { months: [9], category: "fertilize", tip: "Fall potassium boost (0-0-50 or winterizer) strengthens roots before dormancy. Key in Central TX." },
+  // Pest/weed treatment
+  { months: [2, 3], category: "treat", tip: "Apply pre-emergent (Prodiamine/Barricade) before soil hits 55°F to prevent crabgrass and other summer weeds." },
+  { months: [4, 5], category: "treat", tip: "Spot-treat broadleaf weeds (clover, dandelion) with 3-way herbicide while temps are under 85°F." },
+  { months: [7, 8], category: "treat", tip: "Watch for chinch bugs in hot dry spells — yellowing patches near curbs/sidewalks. Treat with bifenthrin." },
+  { months: [10], category: "treat", tip: "Apply pre-emergent for winter weeds (henbit, annual bluegrass) before first cold front." },
+  // Overseeding
+  { months: [9, 10], category: "overseed", tip: "Overseed thin areas with bermuda or repair St. Augustine by patching — timing is critical before 60°F nights." },
+];
+
+const CATEGORY_META: Record<LawnTip["category"], { label: string; color: string; emoji: string }> = {
+  mow:       { label: "Mowing",      color: "#34d399", emoji: "🌿" },
+  water:     { label: "Watering",    color: "#38bdf8", emoji: "💧" },
+  fertilize: { label: "Fertilizing", color: "#fbbf24", emoji: "🌱" },
+  treat:     { label: "Treatment",   color: "#f97316", emoji: "🛡" },
+  overseed:  { label: "Overseed",    color: "#a78bfa", emoji: "🌾" },
+};
+
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function LawnCareSection() {
+  const currentMonth = new Date().getMonth() + 1; // 1–12
+  const currentTips = LAWN_TIPS.filter((t) => t.months.includes(currentMonth));
+  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+  const nextTips = LAWN_TIPS.filter((t) => t.months.includes(nextMonth) && !t.months.includes(currentMonth));
+
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="font-display text-lg font-bold tracking-tight">Leander TX Lawn Care</h2>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
+          Seasonal tips for Central Texas — St. Augustine &amp; bermuda on clay soil.
+        </p>
+      </div>
+
+      {/* Current month tips */}
+      {currentTips.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-widest text-primary/80">
+            {MONTH_NAMES[currentMonth - 1]} — Now
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {currentTips.map((tip, i) => {
+              const meta = CATEGORY_META[tip.category];
+              return (
+                <div
+                  key={i}
+                  className="flex gap-3 rounded-xl border border-border/30 bg-secondary/20 p-4 hover:border-border/50 transition-colors"
+                >
+                  <span className="mt-0.5 text-lg leading-none">{meta.emoji}</span>
+                  <div>
+                    <p
+                      className="mb-1 font-mono text-[10px] font-bold uppercase tracking-wider"
+                      style={{ color: meta.color }}
+                    >
+                      {meta.label}
+                    </p>
+                    <p className="text-[12px] leading-relaxed text-foreground/85">{tip.tip}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Coming up next month */}
+      {nextTips.length > 0 && (
+        <div>
+          <p className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+            {MONTH_NAMES[nextMonth - 1]} — Coming Up
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {nextTips.map((tip, i) => {
+              const meta = CATEGORY_META[tip.category];
+              return (
+                <div
+                  key={i}
+                  className="flex gap-3 rounded-xl border border-border/20 bg-secondary/10 p-3 opacity-70"
+                >
+                  <span className="mt-0.5 text-base leading-none">{meta.emoji}</span>
+                  <div>
+                    <p className="mb-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {meta.label}
+                    </p>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">{tip.tip}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

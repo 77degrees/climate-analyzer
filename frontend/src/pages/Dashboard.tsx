@@ -5,6 +5,10 @@ import {
   ArrowUpDown,
   Droplets,
   RefreshCw,
+  CloudRain,
+  Zap,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 import {
   LineChart,
@@ -21,8 +25,10 @@ import { formatTemp, formatHumidity } from "@/lib/utils";
 import {
   getDashboard,
   getReadings,
+  getForecast,
   type DashboardData,
   type SensorReadings,
+  type ForecastPeriod,
 } from "@/lib/api";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -54,19 +60,175 @@ const TOOLTIP_STYLE = {
   boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
 };
 
+// ── NWS icon category → simple emoji/label ──────────────────
+
+function forecastIconEmoji(shortForecast: string, isDaytime: boolean): string {
+  const s = shortForecast.toLowerCase();
+  if (s.includes("thunder")) return "⛈";
+  if (s.includes("snow")) return "❄️";
+  if (s.includes("rain") || s.includes("shower")) return "🌧";
+  if (s.includes("drizzle") || s.includes("mist")) return "🌦";
+  if (s.includes("fog")) return "🌫";
+  if (s.includes("wind")) return isDaytime ? "💨" : "💨";
+  if (s.includes("partly cloudy") || s.includes("partly sunny") || s.includes("mostly cloudy")) {
+    return isDaytime ? "⛅" : "🌙";
+  }
+  if (s.includes("cloudy") || s.includes("overcast")) return "☁️";
+  if (s.includes("sunny") || s.includes("clear")) return isDaytime ? "☀️" : "🌙";
+  return isDaytime ? "🌤" : "🌙";
+}
+
+// ── Forecast strip ──────────────────────────────────────────
+
+function ForecastStrip({ periods }: { periods: ForecastPeriod[] }) {
+  if (!periods.length) return null;
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-display text-sm font-semibold text-foreground">Forecast</h2>
+        <span className="font-mono text-[10px] text-muted-foreground/60">NWS · next 3–4 days</span>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {periods.map((p, i) => (
+          <div
+            key={i}
+            className={`flex min-w-[90px] shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-3 transition-all ${
+              i === 0
+                ? "border-primary/30 bg-primary/5"
+                : "border-border/30 bg-secondary/20 hover:border-border/60"
+            }`}
+          >
+            <p className="font-display text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {p.name}
+            </p>
+            <span className="text-2xl leading-none" role="img" aria-label={p.short_forecast}>
+              {forecastIconEmoji(p.short_forecast, p.is_daytime)}
+            </span>
+            <p
+              className="font-mono text-base font-bold"
+              style={{
+                color:
+                  (p.temperature ?? 0) >= 100
+                    ? "#ef4444"
+                    : (p.temperature ?? 0) >= 85
+                      ? "#f97316"
+                      : (p.temperature ?? 0) <= 40
+                        ? "#38bdf8"
+                        : "#e5e5e5",
+              }}
+            >
+              {p.temperature != null ? `${p.temperature}°` : "—"}
+            </p>
+            <p className="text-center font-mono text-[9px] leading-tight text-muted-foreground/70">
+              {p.short_forecast.length > 14 ? p.short_forecast.slice(0, 13) + "…" : p.short_forecast}
+            </p>
+            {p.wind_speed && (
+              <p className="font-mono text-[9px] text-muted-foreground/50">
+                {p.wind_direction} {p.wind_speed}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ── Water leak section ───────────────────────────────────────
+
+function WaterLeakSection({ leaks }: { leaks: DashboardData["water_leaks"] }) {
+  if (!leaks.length) return null;
+  const wet = leaks.filter((l) => l.is_wet);
+  return (
+    <Card className={`p-5 ${wet.length > 0 ? "border-red-500/40 bg-red-950/10" : ""}`}>
+      <div className="flex items-center gap-2 mb-3">
+        {wet.length > 0 ? (
+          <AlertTriangle className="h-4 w-4 text-[#ef4444]" />
+        ) : (
+          <ShieldCheck className="h-4 w-4 text-[#34d399]" />
+        )}
+        <h2 className="font-display text-sm font-semibold text-foreground">Water Leak Sensors</h2>
+        {wet.length > 0 && (
+          <span className="ml-auto rounded-full bg-[#ef4444]/20 px-2 py-0.5 font-mono text-[10px] font-bold text-[#ef4444]">
+            {wet.length} WET
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {leaks.map((leak) => (
+          <div
+            key={leak.entity_id}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
+              leak.is_wet
+                ? "border-[#ef4444]/40 bg-[#ef4444]/10"
+                : "border-border/30 bg-secondary/20"
+            }`}
+          >
+            <span
+              className="h-2 w-2 rounded-full shrink-0"
+              style={{ backgroundColor: leak.is_wet ? "#ef4444" : "#34d399" }}
+            />
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-medium text-foreground">
+                {leak.friendly_name}
+              </p>
+              <p className={`font-mono text-[10px] ${leak.is_wet ? "text-[#ef4444]" : "text-[#34d399]"}`}>
+                {leak.is_wet ? "WET" : "Dry"}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ── Power sensors section ────────────────────────────────────
+
+function PowerSection({ sensors }: { sensors: DashboardData["power_sensors"] }) {
+  if (!sensors.length) return null;
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Zap className="h-4 w-4 text-[#fbbf24]" />
+        <h2 className="font-display text-sm font-semibold text-foreground">Power &amp; Energy</h2>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {sensors.map((s) => (
+          <div
+            key={s.entity_id}
+            className="rounded-xl border border-border/30 bg-secondary/20 px-4 py-3"
+          >
+            <p className="truncate font-mono text-[10px] text-muted-foreground">{s.friendly_name}</p>
+            <p className="mt-1 font-mono text-lg font-bold text-[#fbbf24]">
+              {s.value != null ? s.value.toLocaleString(undefined, { maximumFractionDigits: 1 }) : "—"}
+              <span className="ml-1 text-[11px] font-normal text-muted-foreground">{s.unit ?? ""}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ── Main component ───────────────────────────────────────────
+
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [chartData, setChartData] = useState<SensorReadings[]>([]);
+  const [forecast, setForecast] = useState<ForecastPeriod[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     try {
-      const [dash, readings] = await Promise.all([
+      const [dash, readings, fc] = await Promise.all([
         getDashboard(),
         getReadings(2, "temperature"),
+        getForecast().catch(() => [] as ForecastPeriod[]),
       ]);
       setData(dash);
       setChartData(readings);
+      setForecast(fc);
     } catch (e) {
       console.error("Failed to fetch dashboard:", e);
     } finally {
@@ -157,6 +319,14 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* NWS Forecast strip */}
+      {forecast.length > 0 && <ForecastStrip periods={forecast} />}
+
+      {/* Water leak alerts (shown only if tracked sensors exist) */}
+      {data?.water_leaks && data.water_leaks.length > 0 && (
+        <WaterLeakSection leaks={data.water_leaks} />
+      )}
+
       {/* Live Temperature Chart */}
       <Card className="p-6">
         <div className="mb-5 flex items-center justify-between">
@@ -185,11 +355,7 @@ export default function Dashboard() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartPoints}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-              <XAxis
-                dataKey="time"
-                tick={CHART_TICK}
-                stroke={CHART_GRID}
-              />
+              <XAxis dataKey="time" tick={CHART_TICK} stroke={CHART_GRID} />
               <YAxis
                 domain={["auto", "auto"]}
                 tick={CHART_TICK}
@@ -231,6 +397,11 @@ export default function Dashboard() {
         </div>
       </Card>
 
+      {/* Power sensors */}
+      {data?.power_sensors && data.power_sensors.length > 0 && (
+        <PowerSection sensors={data.power_sensors} />
+      )}
+
       {/* HVAC Status + Zone Cards */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* HVAC Status */}
@@ -262,10 +433,7 @@ export default function Dashboard() {
                   {hvac.hvac_action && (
                     <span
                       className="rounded-md px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white"
-                      style={{
-                        backgroundColor:
-                          ACTION_COLORS[hvac.hvac_action] || "#2a2a2a",
-                      }}
+                      style={{ backgroundColor: ACTION_COLORS[hvac.hvac_action] || "#2a2a2a" }}
                     >
                       {ACTION_LABELS[hvac.hvac_action] || hvac.hvac_action}
                     </span>
@@ -292,16 +460,13 @@ export default function Dashboard() {
                 key={zone.zone_id}
                 className="group relative overflow-hidden rounded-lg border border-border/40 bg-secondary/20 p-4 transition-all duration-200 hover:border-border hover:bg-secondary/40"
               >
-                {/* Colored accent */}
                 <div
                   className="absolute inset-x-0 top-0 h-[2px]"
                   style={{
                     background: `linear-gradient(90deg, ${zone.zone_color}00, ${zone.zone_color}, ${zone.zone_color}00)`,
                   }}
                 />
-                <p className="text-[13px] font-semibold text-foreground">
-                  {zone.zone_name}
-                </p>
+                <p className="text-[13px] font-semibold text-foreground">{zone.zone_name}</p>
                 <div className="mt-2.5 flex items-baseline gap-3">
                   <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
                     {formatTemp(zone.avg_temp)}
@@ -315,10 +480,7 @@ export default function Dashboard() {
                 {zone.hvac_action && (
                   <span
                     className="mt-2 inline-block rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white"
-                    style={{
-                      backgroundColor:
-                        ACTION_COLORS[zone.hvac_action] || "#2a2a2a",
-                    }}
+                    style={{ backgroundColor: ACTION_COLORS[zone.hvac_action] || "#2a2a2a" }}
                   >
                     {zone.hvac_action}
                   </span>
@@ -337,6 +499,8 @@ export default function Dashboard() {
   );
 }
 
+// ── Chart helpers ────────────────────────────────────────────
+
 interface ChartLine {
   key: string;
   name: string;
@@ -348,19 +512,12 @@ function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, str
   chartPoints: Record<string, any>[];
   chartLines: ChartLine[];
 } {
-  const zoneMap = new Map<
-    number,
-    { sensors: SensorReadings[]; color: string; isOutdoor: boolean }
-  >();
+  const zoneMap = new Map<number, { sensors: SensorReadings[]; color: string; isOutdoor: boolean }>();
 
   for (const sensor of sensors) {
     if (sensor.zone_id == null) continue;
     if (!zoneMap.has(sensor.zone_id)) {
-      zoneMap.set(sensor.zone_id, {
-        sensors: [],
-        color: sensor.zone_color || "#38bdf8",
-        isOutdoor: sensor.is_outdoor,
-      });
+      zoneMap.set(sensor.zone_id, { sensors: [], color: sensor.zone_color || "#38bdf8", isOutdoor: sensor.is_outdoor });
     }
     const group = zoneMap.get(sensor.zone_id)!;
     group.sensors.push(sensor);
@@ -368,46 +525,30 @@ function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, str
   }
 
   const zoneNames = zoneNameMap || new Map<number, string>();
-
   const allTimestamps = new Set<string>();
   for (const sensor of sensors) {
-    for (const r of sensor.readings) {
-      allTimestamps.add(r.timestamp);
-    }
+    for (const r of sensor.readings) allTimestamps.add(r.timestamp);
   }
 
   const timeMap = new Map<string, Record<string, any>>();
-
   for (const ts of allTimestamps) {
-    const time = new Date(ts).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const time = new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const point: Record<string, any> = { time, _ts: ts };
-
     for (const [zoneId, group] of zoneMap) {
       const key = `zone_${zoneId}`;
       const values: number[] = [];
-
       for (const sensor of group.sensors) {
         const reading = sensor.readings.find((r) => r.timestamp === ts);
-        if (reading?.value != null) {
-          values.push(reading.value);
-        }
+        if (reading?.value != null) values.push(reading.value);
       }
-
       if (values.length > 0) {
         point[key] = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
       }
     }
-
     timeMap.set(ts, point);
   }
 
-  const chartPoints = Array.from(timeMap.values()).sort((a, b) =>
-    a._ts.localeCompare(b._ts),
-  );
-
+  const chartPoints = Array.from(timeMap.values()).sort((a, b) => a._ts.localeCompare(b._ts));
   const chartLines: ChartLine[] = [];
   for (const [zoneId, group] of zoneMap) {
     chartLines.push({
@@ -417,6 +558,5 @@ function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, str
       isOutdoor: group.isOutdoor,
     });
   }
-
   return { chartPoints, chartLines };
 }

@@ -5,7 +5,7 @@
 @layer base {
   :root {
     /* Observatory — warm atmospheric dark theme */
-    --background: 0 0% 4%;            /* #0a0a0a — near-black */
+    --background: 0 0% 7%;            /* #121212 — dark but not pitch black */
     --foreground: 40 10% 92%;          /* warm off-white */
 
     --card: 0 0% 7%;                   /* #121212 — elevated surface */

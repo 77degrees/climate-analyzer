@@ -147,7 +147,34 @@ class ConnectionTest(BaseModel):
     entities_found: int = 0
 
 
+# ── Forecast ──────────────────────────────────────────────────
+
+class ForecastPeriod(BaseModel):
+    name: str
+    temperature: float | None
+    temperature_unit: str
+    short_forecast: str
+    wind_speed: str
+    wind_direction: str
+    is_daytime: bool
+    icon: str
+
+
 # ── Dashboard ─────────────────────────────────────────────────
+
+class WaterLeakStatus(BaseModel):
+    entity_id: str
+    friendly_name: str
+    is_wet: bool
+    last_seen: datetime | None
+
+
+class PowerSensorReading(BaseModel):
+    entity_id: str
+    friendly_name: str
+    value: float | None
+    unit: str | None
+
 
 class DashboardStats(BaseModel):
     indoor_temp: float | None
@@ -181,6 +208,8 @@ class DashboardData(BaseModel):
     stats: DashboardStats
     hvac_statuses: list[HvacStatus]
     zone_cards: list[ZoneCard]
+    water_leaks: list[WaterLeakStatus] = []
+    power_sensors: list[PowerSensorReading] = []
 
 
 # ── Insights ──────────────────────────────────────────────────

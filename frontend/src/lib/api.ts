@@ -49,10 +49,37 @@ export interface ZoneCard {
   hvac_action: string | null;
 }
 
+export interface WaterLeakStatus {
+  entity_id: string;
+  friendly_name: string;
+  is_wet: boolean;
+  last_seen: string | null;
+}
+
+export interface PowerSensorReading {
+  entity_id: string;
+  friendly_name: string;
+  value: number | null;
+  unit: string | null;
+}
+
+export interface ForecastPeriod {
+  name: string;
+  temperature: number | null;
+  temperature_unit: string;
+  short_forecast: string;
+  wind_speed: string;
+  wind_direction: string;
+  is_daytime: boolean;
+  icon: string;
+}
+
 export interface DashboardData {
   stats: DashboardStats;
   hvac_statuses: HvacStatus[];
   zone_cards: ZoneCard[];
+  water_leaks: WaterLeakStatus[];
+  power_sensors: PowerSensorReading[];
 }
 
 export interface ReadingPoint {
@@ -192,6 +219,7 @@ export interface ThermostatInfo {
 // ── API calls ────────────────────────────────────────────────
 
 export const getDashboard = () => fetchJSON<DashboardData>("/dashboard");
+export const getForecast = () => fetchJSON<ForecastPeriod[]>("/weather/forecast");
 export const getReadings = (hours: number, deviceClass?: string) =>
   fetchJSON<SensorReadings[]>(`/readings?hours=${hours}${deviceClass ? `&device_class=${deviceClass}` : ""}`);
 export const getWeatherHistory = (hours: number) => fetchJSON<WeatherPoint[]>(`/weather/history?hours=${hours}`);

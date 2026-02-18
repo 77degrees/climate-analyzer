@@ -90,7 +90,7 @@ async def test_nws_connection(db: AsyncSession = Depends(get_db)):
     lon = float(await _get_or_default(db, "nws_lon") or "-97.8531")
     try:
         nws = NWSClient()
-        station = await nws.resolve_station(lat, lon)
+        station, _ = await nws.resolve_station(lat, lon)
         obs = await nws.get_latest_observation(station)
         temp = obs.get("temperature") if obs else "N/A"
         return ConnectionTest(

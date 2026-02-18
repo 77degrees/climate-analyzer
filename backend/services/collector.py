@@ -76,6 +76,15 @@ async def collect_ha_readings():
                     timestamp=now,
                     value=val,
                 )
+            elif domain == "binary_sensor":
+                # Store moisture sensors as 1.0 (wet) or 0.0 (dry/unknown)
+                raw = state.get("state", "off").lower()
+                val = 1.0 if raw == "on" else 0.0
+                reading = Reading(
+                    sensor_id=sensor.id,
+                    timestamp=now,
+                    value=val,
+                )
             else:
                 continue
 
@@ -100,8 +109,15 @@ async def collect_nws_observation():
 
             try:
                 nws = NWSClient()
-                station_id = await nws.resolve_station(float(lat_str), float(lon_str))
+                station_id, forecast_url = await nws.resolve_station(float(lat_str), float(lon_str))
                 db.add(AppSetting(key="nws_station_id", value=station_id))
+                if forecast_url:
+                    result2 = await db.execute(select(AppSetting).where(AppSetting.key == "nws_forecast_url"))
+                    existing_fu = result2.scalar_one_or_none()
+                    if existing_fu:
+                        existing_fu.value = forecast_url
+                    else:
+                        db.add(AppSetting(key="nws_forecast_url", value=forecast_url))
                 await db.commit()
             except Exception as e:
                 logger.error(f"Failed to resolve NWS station: {e}")
