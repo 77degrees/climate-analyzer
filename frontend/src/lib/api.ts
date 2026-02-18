@@ -174,6 +174,21 @@ export interface MetricsSummary {
   efficiency_score: number;
 }
 
+export interface EnergyProfileDay {
+  date: string;
+  outdoor_avg_temp: number | null;
+  heating_hours: number;
+  cooling_hours: number;
+  total_runtime_hours: number;
+}
+
+export interface ThermostatInfo {
+  sensor_id: number;
+  entity_id: string;
+  friendly_name: string;
+  zone_name: string | null;
+}
+
 // ── API calls ────────────────────────────────────────────────
 
 export const getDashboard = () => fetchJSON<DashboardData>("/dashboard");
@@ -204,6 +219,12 @@ export const testHA = () => fetchJSON<ConnectionTest>("/settings/test-ha", { met
 export const testNWS = () => fetchJSON<ConnectionTest>("/settings/test-nws", { method: "POST" });
 export const getDbStats = () => fetchJSON<DbStats>("/settings/db-stats");
 
-export const getRecoveryEvents = (days: number) => fetchJSON<RecoveryEvent[]>(`/metrics/recovery?days=${days}`);
-export const getDutyCycle = (days: number) => fetchJSON<DutyCycleDay[]>(`/metrics/duty-cycle?days=${days}`);
-export const getMetricsSummary = (days: number) => fetchJSON<MetricsSummary>(`/metrics/summary?days=${days}`);
+export const getRecoveryEvents = (days: number, sensorId?: number) =>
+  fetchJSON<RecoveryEvent[]>(`/metrics/recovery?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+export const getDutyCycle = (days: number, sensorId?: number) =>
+  fetchJSON<DutyCycleDay[]>(`/metrics/duty-cycle?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+export const getMetricsSummary = (days: number, sensorId?: number) =>
+  fetchJSON<MetricsSummary>(`/metrics/summary?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+export const getEnergyProfile = (days: number, sensorId?: number) =>
+  fetchJSON<EnergyProfileDay[]>(`/metrics/energy-profile?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+export const getThermostats = () => fetchJSON<ThermostatInfo[]>("/metrics/thermostats");

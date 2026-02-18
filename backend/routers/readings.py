@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/readings", tags=["readings"])
 
 @router.get("", response_model=list[SensorReadings])
 async def get_readings(
-    hours: int = Query(24, ge=1, le=8760),
+    hours: int = Query(24, ge=1, le=26280),
     sensor_ids: str | None = Query(None, description="Comma-separated sensor IDs"),
     device_class: str | None = Query(None, description="Filter by device_class (e.g. temperature, humidity)"),
     db: AsyncSession = Depends(get_db),

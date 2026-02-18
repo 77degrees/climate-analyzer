@@ -174,6 +174,77 @@ async def compute_hold_efficiency(
     return round(sum(drifts) / len(drifts), 1) if drifts else 0.0
 
 
+async def compute_energy_profile(
+    db: AsyncSession,
+    sensor_id: int,
+    start: datetime,
+    end: datetime,
+) -> list[dict]:
+    """Daily outdoor avg temp vs HVAC runtime hours for scatter/energy chart."""
+    result = await db.execute(
+        select(Reading)
+        .where(
+            and_(
+                Reading.sensor_id == sensor_id,
+                Reading.timestamp >= start,
+                Reading.timestamp <= end,
+                Reading.hvac_action.isnot(None),
+            )
+        )
+        .order_by(Reading.timestamp)
+    )
+    readings = result.scalars().all()
+
+    # Group by date, count heating/cooling samples
+    days: dict[str, dict] = {}
+    for r in readings:
+        day = r.timestamp.strftime("%Y-%m-%d")
+        if day not in days:
+            days[day] = {"heating": 0, "cooling": 0, "total": 0}
+        action = r.hvac_action or "off"
+        if action == "heating":
+            days[day]["heating"] += 1
+        elif action == "cooling":
+            days[day]["cooling"] += 1
+        days[day]["total"] += 1
+
+    # Get daily outdoor avg temps from weather observations
+    weather_result = await db.execute(
+        select(
+            func.strftime("%Y-%m-%d", WeatherObservation.timestamp).label("day"),
+            func.avg(WeatherObservation.temperature).label("avg_temp"),
+        )
+        .where(
+            and_(
+                WeatherObservation.timestamp >= start,
+                WeatherObservation.timestamp <= end,
+                WeatherObservation.temperature.isnot(None),
+            )
+        )
+        .group_by(func.strftime("%Y-%m-%d", WeatherObservation.timestamp))
+    )
+    outdoor_temps = {row.day: round(row.avg_temp, 1) for row in weather_result}
+
+    profile = []
+    for day, counts in sorted(days.items()):
+        total = counts["total"] or 1
+        # Estimate hours based on sample count (5-min intervals = 12 samples/hour)
+        samples_per_hour = total / 24  # approximate samples per hour for this day
+        scale = 1 / max(samples_per_hour, 1) if samples_per_hour > 0 else 1 / 12
+        heating_h = round(counts["heating"] * scale, 1)
+        cooling_h = round(counts["cooling"] * scale, 1)
+
+        profile.append({
+            "date": day,
+            "outdoor_avg_temp": outdoor_temps.get(day),
+            "heating_hours": heating_h,
+            "cooling_hours": cooling_h,
+            "total_runtime_hours": round(heating_h + cooling_h, 1),
+        })
+
+    return profile
+
+
 async def compute_efficiency_score(
     avg_recovery_min: float,
     hold_efficiency: float,

@@ -22,7 +22,7 @@ async def get_current_weather(db: AsyncSession = Depends(get_db)):
 
 @router.get("/history", response_model=list[WeatherOut])
 async def get_weather_history(
-    hours: int = Query(24, ge=1, le=8760),
+    hours: int = Query(24, ge=1, le=26280),
     db: AsyncSession = Depends(get_db),
 ):
     """Get weather observations within time range."""

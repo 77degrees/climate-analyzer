@@ -11,6 +11,8 @@ const ranges = [
   { label: "24h", hours: 24 },
   { label: "7d", hours: 168 },
   { label: "30d", hours: 720 },
+  { label: "90d", hours: 2160 },
+  { label: "1y", hours: 8760 },
 ];
 
 export function TimeRangeSelector({ value, onChange }: TimeRangeSelectorProps) {

@@ -8,11 +8,11 @@ services:
     ports:
       - "8400:8400"
     volumes:
-      - ./data:/app/data
+      - /mnt/user/appdata/climate-analyzer/data:/app/data
     environment:
       - HA_URL=${HA_URL:-http://homeassistant.local:8123}
       - HA_TOKEN=${HA_TOKEN:-}
       - NWS_LAT=${NWS_LAT:-30.5788}
-      - NWS_LON=${NWS_LON:-97.8531}
+      - NWS_LON=${NWS_LON:--97.8531}
       - TZ=America/Chicago
       - DATA_DIR=/app/data

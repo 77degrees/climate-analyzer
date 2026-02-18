@@ -107,6 +107,19 @@ class MetricsSummary(BaseModel):
     hold_efficiency: float  # avg drift from setpoint in F
     efficiency_score: float  # 0-100
 
+class EnergyProfileDay(BaseModel):
+    date: str
+    outdoor_avg_temp: float | None
+    heating_hours: float
+    cooling_hours: float
+    total_runtime_hours: float
+
+class ThermostatInfo(BaseModel):
+    sensor_id: int
+    entity_id: str
+    friendly_name: str
+    zone_name: str | None
+
 
 # ── Settings ──────────────────────────────────────────────────
 
