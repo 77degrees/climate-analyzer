@@ -462,7 +462,8 @@ async def compute_ac_struggle(
                 Reading.timestamp <= end,
                 Reading.hvac_action == "cooling",
                 Reading.value.isnot(None),
-                Reading.setpoint_cool.isnot(None),
+                Reading.value > 30,    # filter bogus sensor readings
+                Reading.value < 110,
             )
         )
         .order_by(Reading.timestamp)
@@ -472,14 +473,30 @@ async def compute_ac_struggle(
     if not readings:
         return []
 
-    # Group overshoot values by date
-    days: dict[str, list[float]] = {}
+    # Group indoor temps and actual setpoints by date
+    days: dict[str, dict] = {}
     for r in readings:
         day = r.timestamp.strftime("%Y-%m-%d")
-        overshoot = r.value - r.setpoint_cool
         if day not in days:
-            days[day] = []
-        days[day].append(overshoot)
+            days[day] = {"temps": [], "setpoints": []}
+        days[day]["temps"].append(r.value)
+        sp = r.setpoint_cool or r.setpoint_heat
+        if sp is not None:
+            days[day]["setpoints"].append(sp)
+
+    # Build overshoot list per day using actual or estimated setpoint
+    day_data: dict[str, list[float]] = {}
+    day_targets: dict[str, float] = {}
+    for day, data in days.items():
+        temps = sorted(data["temps"])
+        n = len(temps)
+        if data["setpoints"]:
+            target = sum(data["setpoints"]) / len(data["setpoints"])
+        else:
+            # Estimate: 25th percentile — the temperature the AC was fighting toward
+            target = temps[max(0, n // 4)]
+        day_data[day] = [t - target for t in temps]
+        day_targets[day] = target
 
     # Daily outdoor high + avg from weather
     weather_result = await db.execute(
@@ -503,21 +520,21 @@ async def compute_ac_struggle(
     }
 
     result_list = []
-    for day in sorted(days.keys()):
-        overshoots = days[day]
+    for day in sorted(day_data.keys()):
+        overshoots = day_data[day]
         n = len(overshoots)
 
         max_ov = round(max(overshoots), 2)
         avg_ov = round(sum(overshoots) / n, 2)
         struggle_n = sum(1 for o in overshoots if o > 0.5)
-        struggle_hours = round(struggle_n / 12, 1)   # 5-min intervals → hours
+        struggle_hours = round(struggle_n / 12, 1)
         hours_cooling = round(n / 12, 1)
 
         outdoor_high, outdoor_avg = outdoor.get(day, (None, None))
 
         # Struggle score 0–100: severity of overshoot + fraction of time struggling
         struggle_pct = struggle_n / max(n, 1)
-        overshoot_score = min(max(max_ov, 0) / 5.0 * 60, 60)  # 5°F overshoot = max 60 pts
+        overshoot_score = min(max(max_ov, 0) / 5.0 * 60, 60)  # 5°F = max 60 pts
         pct_score = struggle_pct * 40                           # 100% of time = 40 pts
         struggle_score = round(min(overshoot_score + pct_score, 100), 1)
 

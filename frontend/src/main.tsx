@@ -10,6 +10,11 @@ import Sensors from "@/pages/Sensors";
 import Settings from "@/pages/Settings";
 import "@/styles/globals.css";
 
+// Restore saved theme before first render to avoid flash
+if (localStorage.getItem("ca-theme") === "light") {
+  document.documentElement.classList.add("light");
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

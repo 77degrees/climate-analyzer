@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   History,
@@ -7,6 +8,8 @@ import {
   Thermometer,
   Radio,
   Lightbulb,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +23,17 @@ const navItems = [
 ];
 
 export function Sidebar() {
+  const [theme, setTheme] = useState<"dark" | "light">(
+    () => (localStorage.getItem("ca-theme") as "dark" | "light") || "dark",
+  );
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("light", theme === "light");
+    localStorage.setItem("ca-theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
+
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-[220px] flex-col border-r border-border/50 bg-sidebar">
       {/* Logo */}
@@ -64,10 +78,21 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="mx-4 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      <div className="px-5 py-4">
+      <div className="flex items-center justify-between px-5 py-4">
         <p className="text-[10px] font-medium tracking-wide text-muted-foreground/60">
           v1.0 &middot; 77&deg;
         </p>
+        <button
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+        >
+          {theme === "dark" ? (
+            <Sun className="h-3.5 w-3.5" />
+          ) : (
+            <Moon className="h-3.5 w-3.5" />
+          )}
+        </button>
       </div>
     </aside>
   );
