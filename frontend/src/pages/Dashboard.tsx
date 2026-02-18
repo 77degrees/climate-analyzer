@@ -27,9 +27,9 @@ import {
 
 const ACTION_COLORS: Record<string, string> = {
   heating: "#f97316",
-  cooling: "#3b82f6",
-  idle: "#6b7280",
-  off: "#374151",
+  cooling: "#38bdf8",
+  idle: "#525252",
+  off: "#2a2a2a",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -41,6 +41,17 @@ const ACTION_LABELS: Record<string, string> = {
   cool: "COOL",
   auto: "AUTO",
   heat_cool: "AUTO",
+};
+
+const CHART_GRID = "#1a1a1a";
+const CHART_TICK = { fill: "#666", fontSize: 11, fontFamily: "JetBrains Mono" };
+const TOOLTIP_STYLE = {
+  backgroundColor: "#141414",
+  border: "1px solid #242424",
+  borderRadius: "10px",
+  fontSize: 12,
+  fontFamily: "DM Sans",
+  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
 };
 
 export default function Dashboard() {
@@ -69,20 +80,15 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Filter to zoned sensors only (excludes appliances, vehicles, batteries)
   const zonedSensors = chartData.filter((s) => s.zone_id != null);
-
-  // Build zone name lookup from dashboard data
   const zoneNameMap = new Map<number, string>();
   data?.zone_cards.forEach((z) => zoneNameMap.set(z.zone_id, z.zone_name));
-
-  // Build chart data points — one line per zone (averaged)
   const { chartPoints, chartLines } = buildZoneChart(zonedSensors, zoneNameMap);
 
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+        <RefreshCw className="h-5 w-5 animate-spin text-primary/60" />
       </div>
     );
   }
@@ -91,11 +97,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">Dashboard</h1>
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            Real-time climate overview
+          </p>
+        </div>
         <button
           onClick={fetchData}
-          className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-2 rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Refresh
@@ -108,18 +120,18 @@ export default function Dashboard() {
           title="Indoor Temp"
           value={formatTemp(stats?.indoor_temp)}
           icon={Thermometer}
-          borderColor="#06b6d4"
+          borderColor="#38bdf8"
         />
         <StatCard
           title="Outdoor Temp"
           value={formatTemp(stats?.outdoor_temp)}
           subtitle={stats?.feels_like != null ? `Feels like ${formatTemp(stats.feels_like)}` : undefined}
           icon={Sun}
-          borderColor="#f59e0b"
+          borderColor="#fbbf24"
         />
         <StatCard
-          title="Indoor/Outdoor Delta"
-          value={stats?.delta != null ? `${stats.delta > 0 ? "+" : ""}${stats.delta}°F` : "--"}
+          title="Indoor / Outdoor"
+          value={stats?.delta != null ? `${stats.delta > 0 ? "+" : ""}${stats.delta}\u00b0F` : "--"}
           subtitleColor={
             stats?.delta != null
               ? Math.abs(stats.delta) > 20
@@ -135,44 +147,56 @@ export default function Dashboard() {
               : undefined
           }
           icon={ArrowUpDown}
-          borderColor="#8b5cf6"
+          borderColor="#a78bfa"
         />
         <StatCard
           title="Humidity"
           value={formatHumidity(stats?.humidity)}
           icon={Droplets}
-          borderColor="#10b981"
+          borderColor="#34d399"
         />
       </div>
 
       {/* Live Temperature Chart */}
-      <Card className="p-5">
-        <h2 className="mb-4 font-display text-sm font-semibold text-foreground">
-          Temperature — Last 2 Hours
-        </h2>
+      <Card className="p-6">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="font-display text-sm font-semibold text-foreground">
+              Temperature
+            </h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Last 2 hours by zone</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {chartLines.map((line) => (
+              <div key={line.key} className="flex items-center gap-1.5">
+                <div
+                  className="h-[3px] w-4 rounded-full"
+                  style={{
+                    backgroundColor: line.isOutdoor ? "#fbbf24" : line.color,
+                    opacity: line.isOutdoor ? 0.7 : 1,
+                  }}
+                />
+                <span className="text-[10px] text-muted-foreground">{line.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartPoints}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 20%, 18%)" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
               <XAxis
                 dataKey="time"
-                tick={{ fill: "hsl(215, 15%, 55%)", fontSize: 11 }}
-                stroke="hsl(222, 20%, 18%)"
+                tick={CHART_TICK}
+                stroke={CHART_GRID}
               />
               <YAxis
                 domain={["auto", "auto"]}
-                tick={{ fill: "hsl(215, 15%, 55%)", fontSize: 11 }}
-                stroke="hsl(222, 20%, 18%)"
-                tickFormatter={(v) => `${v}°`}
+                tick={CHART_TICK}
+                stroke={CHART_GRID}
+                tickFormatter={(v) => `${v}\u00b0`}
               />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(222, 41%, 8%)",
-                  border: "1px solid hsl(222, 20%, 18%)",
-                  borderRadius: "8px",
-                  fontSize: 12,
-                }}
-              />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
               {chartLines
                 .filter((l) => !l.isOutdoor)
                 .map((line) => (
@@ -184,9 +208,9 @@ export default function Dashboard() {
                     stroke={line.color}
                     strokeWidth={2}
                     dot={false}
+                    connectNulls
                   />
                 ))}
-              {/* Outdoor line - dashed */}
               {chartLines
                 .filter((l) => l.isOutdoor)
                 .map((line) => (
@@ -195,10 +219,11 @@ export default function Dashboard() {
                     type="monotone"
                     dataKey={line.key}
                     name={line.name}
-                    stroke="#f59e0b"
+                    stroke="#fbbf24"
                     strokeWidth={2}
-                    strokeDasharray="5 5"
+                    strokeDasharray="6 4"
                     dot={false}
+                    connectNulls
                   />
                 ))}
             </LineChart>
@@ -209,37 +234,37 @@ export default function Dashboard() {
       {/* HVAC Status + Zone Cards */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* HVAC Status */}
-        <Card className="p-5">
+        <Card className="p-6">
           <h2 className="mb-4 font-display text-sm font-semibold text-foreground">
             HVAC Status
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {data?.hvac_statuses.map((hvac) => (
               <div
                 key={hvac.entity_id}
-                className="flex items-center justify-between rounded-lg border border-border bg-secondary/30 px-4 py-3"
+                className="flex items-center justify-between rounded-lg border border-border/40 bg-secondary/30 px-4 py-3 transition-colors hover:border-border"
               >
                 <div>
-                  <p className="text-sm font-medium text-foreground">
+                  <p className="text-[13px] font-semibold text-foreground">
                     {hvac.zone_name || hvac.friendly_name}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                     {formatTemp(hvac.current_temp)}
-                    {hvac.setpoint_heat && ` · Set: ${formatTemp(hvac.setpoint_heat)}`}
+                    {hvac.setpoint_heat && ` \u00b7 Set: ${formatTemp(hvac.setpoint_heat)}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {hvac.hvac_mode && (
-                    <span className="rounded-md bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+                    <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       {ACTION_LABELS[hvac.hvac_mode] || hvac.hvac_mode}
                     </span>
                   )}
                   {hvac.hvac_action && (
                     <span
-                      className="rounded-md px-2 py-0.5 text-[10px] font-bold uppercase text-white"
+                      className="rounded-md px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white"
                       style={{
                         backgroundColor:
-                          ACTION_COLORS[hvac.hvac_action] || "#374151",
+                          ACTION_COLORS[hvac.hvac_action] || "#2a2a2a",
                       }}
                     >
                       {ACTION_LABELS[hvac.hvac_action] || hvac.hvac_action}
@@ -257,7 +282,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Zone Cards */}
-        <Card className="p-5">
+        <Card className="p-6">
           <h2 className="mb-4 font-display text-sm font-semibold text-foreground">
             Zones
           </h2>
@@ -265,31 +290,34 @@ export default function Dashboard() {
             {data?.zone_cards.map((zone) => (
               <div
                 key={zone.zone_id}
-                className="relative overflow-hidden rounded-lg border border-border bg-secondary/30 p-4"
+                className="group relative overflow-hidden rounded-lg border border-border/40 bg-secondary/20 p-4 transition-all duration-200 hover:border-border hover:bg-secondary/40"
               >
+                {/* Colored accent */}
                 <div
-                  className="absolute inset-x-0 top-0 h-[3px]"
-                  style={{ backgroundColor: zone.zone_color }}
+                  className="absolute inset-x-0 top-0 h-[2px]"
+                  style={{
+                    background: `linear-gradient(90deg, ${zone.zone_color}00, ${zone.zone_color}, ${zone.zone_color}00)`,
+                  }}
                 />
-                <p className="text-sm font-semibold text-foreground">
+                <p className="text-[13px] font-semibold text-foreground">
                   {zone.zone_name}
                 </p>
-                <div className="mt-2 flex items-baseline gap-3">
-                  <span className="text-xl font-bold text-foreground">
+                <div className="mt-2.5 flex items-baseline gap-3">
+                  <span className="font-mono text-2xl font-bold tracking-tight text-foreground">
                     {formatTemp(zone.avg_temp)}
                   </span>
                   {zone.avg_humidity != null && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="font-mono text-[11px] text-muted-foreground">
                       {formatHumidity(zone.avg_humidity)}
                     </span>
                   )}
                 </div>
                 {zone.hvac_action && (
                   <span
-                    className="mt-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase text-white"
+                    className="mt-2 inline-block rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white"
                     style={{
                       backgroundColor:
-                        ACTION_COLORS[zone.hvac_action] || "#374151",
+                        ACTION_COLORS[zone.hvac_action] || "#2a2a2a",
                     }}
                   >
                     {zone.hvac_action}
@@ -320,7 +348,6 @@ function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, str
   chartPoints: Record<string, any>[];
   chartLines: ChartLine[];
 } {
-  // Group sensors by zone
   const zoneMap = new Map<
     number,
     { sensors: SensorReadings[]; color: string; isOutdoor: boolean }
@@ -331,20 +358,17 @@ function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, str
     if (!zoneMap.has(sensor.zone_id)) {
       zoneMap.set(sensor.zone_id, {
         sensors: [],
-        color: sensor.zone_color || "#06b6d4",
+        color: sensor.zone_color || "#38bdf8",
         isOutdoor: sensor.is_outdoor,
       });
     }
     const group = zoneMap.get(sensor.zone_id)!;
     group.sensors.push(sensor);
-    // If any sensor in the zone is outdoor, mark the zone as outdoor
     if (sensor.is_outdoor) group.isOutdoor = true;
   }
 
-  // Use provided zone names or fall back to zone ID
   const zoneNames = zoneNameMap || new Map<number, string>();
 
-  // Collect all unique timestamps
   const allTimestamps = new Set<string>();
   for (const sensor of sensors) {
     for (const r of sensor.readings) {
@@ -352,7 +376,6 @@ function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, str
     }
   }
 
-  // Build time-aligned points with zone averages
   const timeMap = new Map<string, Record<string, any>>();
 
   for (const ts of allTimestamps) {
@@ -374,7 +397,6 @@ function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, str
       }
 
       if (values.length > 0) {
-        // Average all sensor values for this zone at this timestamp
         point[key] = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
       }
     }
@@ -386,7 +408,6 @@ function buildZoneChart(sensors: SensorReadings[], zoneNameMap?: Map<number, str
     a._ts.localeCompare(b._ts),
   );
 
-  // Build chart line definitions
   const chartLines: ChartLine[] = [];
   for (const [zoneId, group] of zoneMap) {
     chartLines.push({

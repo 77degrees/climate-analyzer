@@ -53,8 +53,8 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        display: ["Outfit", "Inter", "system-ui", "sans-serif"],
+        sans: ["DM Sans", "system-ui", "sans-serif"],
+        display: ["Bricolage Grotesque", "DM Sans", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
       },
       keyframes: {
@@ -62,9 +62,19 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        "pulse-glow": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.7" },
+        },
+        "slide-in-right": {
+          "0%": { opacity: "0", transform: "translateX(-8px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
       },
       animation: {
         "fade-in-up": "fade-in-up 0.4s ease-out both",
+        "pulse-glow": "pulse-glow 2s ease-in-out infinite",
+        "slide-in-right": "slide-in-right 0.3s ease-out both",
       },
     },
   },

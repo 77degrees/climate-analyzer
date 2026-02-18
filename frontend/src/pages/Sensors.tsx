@@ -147,12 +147,12 @@ function getActionBadge(action: string | null) {
   if (!action) return null;
   const colors: Record<string, string> = {
     heating: "bg-orange-500",
-    cooling: "bg-blue-500",
-    idle: "bg-gray-500",
-    off: "bg-gray-700",
+    cooling: "bg-sky-400",
+    idle: "bg-neutral-500",
+    off: "bg-neutral-700",
   };
   return (
-    <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold uppercase text-white", colors[action] || "bg-gray-600")}>
+    <span className={cn("rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white", colors[action] || "bg-neutral-600")}>
       {action}
     </span>
   );
@@ -168,7 +168,7 @@ export default function Sensors() {
   const [discovering, setDiscovering] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newZoneName, setNewZoneName] = useState("");
-  const [newZoneColor, setNewZoneColor] = useState("#06b6d4");
+  const [newZoneColor, setNewZoneColor] = useState("#e5a10e");
   const [showZonePanel, setShowZonePanel] = useState(false);
 
   const loadData = async () => {
@@ -228,14 +228,12 @@ export default function Sensors() {
     setSensors(s);
   };
 
-  // Unique platforms for filter
   const platforms = useMemo(() => {
     const p = new Set<string>();
     sensors.forEach((s) => { if (s.platform) p.add(s.platform); });
     return Array.from(p).sort();
   }, [sensors]);
 
-  // Filter + search
   const filtered = useMemo(() => {
     return sensors.filter((s) => {
       if (!CATEGORY_FILTERS[filter].match(s)) return false;
@@ -253,7 +251,6 @@ export default function Sensors() {
     });
   }, [sensors, filter, platformFilter, searchQuery]);
 
-  // Category counts
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const key of Object.keys(CATEGORY_FILTERS) as FilterCategory[]) {
@@ -266,32 +263,32 @@ export default function Sensors() {
   const outdoorCount = sensors.filter((s) => s.is_outdoor).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold">Sensors</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {sensors.length} entities · {trackedCount} tracked · {outdoorCount} outdoor
+          <h1 className="font-display text-2xl font-bold tracking-tight">Sensors</h1>
+          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+            {sensors.length} entities &middot; {trackedCount} tracked &middot; {outdoorCount} outdoor
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowZonePanel(!showZonePanel)}
-            className="rounded-lg bg-secondary px-3 py-2 text-xs font-medium text-secondary-foreground hover:bg-secondary/80"
+            className="rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-[12px] font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
           >
             Zones ({zones.length})
           </button>
           <button
             onClick={handleDiscover}
             disabled={discovering}
-            className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             <Search className={cn("h-3.5 w-3.5", discovering && "animate-spin")} />
             Re-Discover
           </button>
           <button
             onClick={loadData}
-            className="rounded-lg bg-secondary px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+            className="rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           </button>
@@ -300,17 +297,17 @@ export default function Sensors() {
 
       {/* Zone Management Panel */}
       {showZonePanel && (
-        <Card className="p-4">
+        <Card className="p-5">
           <h2 className="mb-3 text-sm font-semibold">Zones</h2>
           <div className="flex flex-wrap gap-2 mb-3">
             {zones.map((zone) => (
               <div
                 key={zone.id}
-                className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-1.5"
+                className="flex items-center gap-2 rounded-lg border border-border/40 bg-secondary/20 px-3 py-1.5"
               >
-                <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: zone.color }} />
-                <span className="text-sm">{zone.name}</span>
-                <button onClick={() => handleDeleteZone(zone.id)} className="text-muted-foreground hover:text-destructive ml-1">
+                <div className="h-2.5 w-2.5 rounded-full ring-1 ring-white/10" style={{ backgroundColor: zone.color }} />
+                <span className="text-[13px] font-medium">{zone.name}</span>
+                <button onClick={() => handleDeleteZone(zone.id)} className="text-muted-foreground hover:text-destructive ml-1 transition-colors">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>
@@ -322,16 +319,16 @@ export default function Sensors() {
               value={newZoneName}
               onChange={(e) => setNewZoneName(e.target.value)}
               placeholder="New zone (e.g. Upstairs, Downstairs, Master Bedroom)"
-              className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="flex-1 rounded-lg border border-border/50 bg-secondary/30 px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
               onKeyDown={(e) => e.key === "Enter" && handleCreateZone()}
             />
             <input
               type="color"
               value={newZoneColor}
               onChange={(e) => setNewZoneColor(e.target.value)}
-              className="h-8 w-8 cursor-pointer rounded border border-input bg-background"
+              className="h-9 w-9 cursor-pointer rounded-lg border border-border/50 bg-secondary/30"
             />
-            <button onClick={handleCreateZone} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90">
+            <button onClick={handleCreateZone} className="rounded-lg bg-primary px-3 py-2 text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90">
               <Plus className="h-4 w-4" />
             </button>
           </div>
@@ -339,21 +336,21 @@ export default function Sensors() {
       )}
 
       {/* Filter tabs */}
-      <div className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-secondary/30 p-1">
+      <div className="flex gap-0.5 overflow-x-auto rounded-lg border border-border/40 bg-secondary/20 p-1">
         {(Object.entries(CATEGORY_FILTERS) as [FilterCategory, typeof CATEGORY_FILTERS.all][]).map(
           ([key, { label }]) => (
             <button
               key={key}
               onClick={() => setFilter(key)}
               className={cn(
-                "whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                "whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium transition-all duration-200",
                 filter === key
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               {label}
-              <span className="ml-1.5 opacity-60">{counts[key]}</span>
+              <span className="ml-1.5 font-mono opacity-50">{counts[key]}</span>
             </button>
           ),
         )}
@@ -390,7 +387,7 @@ export default function Sensors() {
                 style={{ backgroundColor: getPlatformColor(p) }}
               />
               {getPlatformLabel(p)}
-              <span className="opacity-60">
+              <span className="font-mono opacity-50">
                 {sensors.filter((s) => s.platform === p).length}
               </span>
             </button>
@@ -400,13 +397,13 @@ export default function Sensors() {
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search by name, entity ID, or device class..."
-          className="w-full rounded-lg border border-input bg-background py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full rounded-lg border border-border/50 bg-secondary/30 py-2.5 pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 transition-colors"
         />
       </div>
 
@@ -418,41 +415,47 @@ export default function Sensors() {
           const Icon = DEVICE_CLASS_ICONS[sensor.device_class || ""] || Thermometer;
 
           return (
-            <Card
+            <div
               key={sensor.id}
               className={cn(
-                "flex items-center gap-4 px-4 py-3 transition-colors",
-                isUnavailable && "opacity-50",
+                "glass-card flex items-center gap-4 px-4 py-3 transition-all duration-200 hover:border-white/[0.1]",
+                isUnavailable && "opacity-40",
               )}
             >
               {/* Icon + Info */}
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                <Icon className="h-4 w-4 text-primary" />
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                style={{ backgroundColor: `${sensor.zone_color || "#e5a10e"}15` }}
+              >
+                <Icon
+                  className="h-4 w-4"
+                  style={{ color: sensor.zone_color || "#e5a10e" }}
+                />
               </div>
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-medium text-foreground">
+                  <p className="truncate text-[13px] font-semibold text-foreground">
                     {sensor.friendly_name}
                   </p>
                   {isUnavailable && (
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                       UNAVAILABLE
                     </span>
                   )}
                   {live?.hvac_action && getActionBadge(live.hvac_action)}
                 </div>
-                <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
                   <span className="truncate">{sensor.entity_id}</span>
-                  <span>·</span>
-                  <span>{sensor.domain}/{sensor.device_class || "—"}</span>
+                  <span>&middot;</span>
+                  <span>{sensor.domain}/{sensor.device_class || "\u2014"}</span>
                   {sensor.platform && (
                     <>
-                      <span>·</span>
+                      <span>&middot;</span>
                       <span
                         className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
                         style={{
-                          backgroundColor: getPlatformColor(sensor.platform) + "20",
+                          backgroundColor: getPlatformColor(sensor.platform) + "15",
                           color: getPlatformColor(sensor.platform),
                         }}
                       >
@@ -466,17 +469,17 @@ export default function Sensors() {
               {/* Live value + last seen */}
               <div className="w-28 text-right">
                 {live?.value != null ? (
-                  <p className={cn("text-sm font-semibold", getStatusColor(live?.state))}>
+                  <p className={cn("font-mono text-sm font-semibold", getStatusColor(live?.state))}>
                     {typeof live.value === "number" ? Math.round(live.value * 10) / 10 : live.value}
-                    {live.unit ? <span className="text-xs text-muted-foreground ml-0.5">{live.unit}</span> : null}
+                    {live.unit ? <span className="text-[10px] text-muted-foreground ml-0.5">{live.unit}</span> : null}
                   </p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    {isUnavailable ? "—" : live?.state || "—"}
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    {isUnavailable ? "\u2014" : live?.state || "\u2014"}
                   </p>
                 )}
                 {live?.last_updated && (
-                  <p className="text-[10px] text-muted-foreground/70 mt-0.5" title={live.last_updated}>
+                  <p className="font-mono text-[10px] text-muted-foreground/50 mt-0.5" title={live.last_updated}>
                     {timeAgo(live.last_updated)}
                   </p>
                 )}
@@ -491,7 +494,7 @@ export default function Sensors() {
                       zone_id: e.target.value ? Number(e.target.value) : null,
                     })
                   }
-                  className="w-full rounded border border-input bg-background px-2 py-1 text-xs text-foreground"
+                  className="w-full rounded-md border border-border/50 bg-secondary/30 px-2 py-1.5 text-[11px] text-foreground"
                 >
                   <option value="">No zone</option>
                   {zones.map((z) => (
@@ -507,10 +510,10 @@ export default function Sensors() {
                 onClick={() => handleSensorUpdate(sensor.id, { is_outdoor: !sensor.is_outdoor })}
                 title={sensor.is_outdoor ? "Outdoor sensor" : "Indoor sensor"}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-200",
                   sensor.is_outdoor
-                    ? "border-brand/30 bg-brand/10 text-brand"
-                    : "border-border text-muted-foreground hover:text-foreground",
+                    ? "border-[#fbbf24]/30 bg-[#fbbf24]/10 text-[#fbbf24]"
+                    : "border-border/40 text-muted-foreground hover:text-foreground hover:border-border",
                 )}
               >
                 {sensor.is_outdoor ? <TreePine className="h-3.5 w-3.5" /> : <Home className="h-3.5 w-3.5" />}
@@ -521,15 +524,15 @@ export default function Sensors() {
                 onClick={() => handleSensorUpdate(sensor.id, { is_tracked: !sensor.is_tracked })}
                 title={sensor.is_tracked ? "Tracking (click to stop)" : "Not tracked (click to track)"}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-200",
                   sensor.is_tracked
                     ? "border-primary/30 bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground",
+                    : "border-border/40 text-muted-foreground hover:text-foreground hover:border-border",
                 )}
               >
                 {sensor.is_tracked ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
               </button>
-            </Card>
+            </div>
           );
         })}
 

@@ -3,44 +3,53 @@
 @tailwind utilities;
 
 @layer base {
-  /* Dark-only theme — matches Quorum design system */
   :root {
-    --background: 222 47% 5%;
-    --foreground: 210 40% 96%;
+    /* Observatory — warm atmospheric dark theme */
+    --background: 0 0% 4%;            /* #0a0a0a — near-black */
+    --foreground: 40 10% 92%;          /* warm off-white */
 
-    --card: 222 41% 8%;
-    --card-foreground: 210 40% 96%;
+    --card: 0 0% 7%;                   /* #121212 — elevated surface */
+    --card-foreground: 40 10% 92%;
 
-    --popover: 222 41% 8%;
-    --popover-foreground: 210 40% 96%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 40 10% 92%;
 
-    --primary: 190 95% 39%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 40 88% 48%;             /* #E5A10E — warm amber */
+    --primary-foreground: 0 0% 4%;
 
-    --secondary: 222 25% 14%;
-    --secondary-foreground: 210 40% 96%;
+    --secondary: 0 0% 11%;             /* #1c1c1c — muted surface */
+    --secondary-foreground: 40 10% 85%;
 
-    --muted: 222 25% 14%;
-    --muted-foreground: 215 15% 55%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 45%;      /* #737373 — dim text */
 
-    --accent: 222 25% 14%;
-    --accent-foreground: 210 40% 96%;
+    --accent: 0 0% 14%;               /* slightly lighter for hover */
+    --accent-foreground: 40 10% 92%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;          /* red */
+    --destructive-foreground: 0 0% 98%;
 
-    --success: 160 84% 39%;
-    --brand: 38 92% 50%;
+    --success: 152 69% 41%;            /* green */
+    --warning: 38 92% 50%;             /* amber */
+    --brand: 40 88% 48%;               /* same as primary — amber */
 
-    --border: 222 20% 18%;
-    --input: 222 20% 18%;
-    --ring: 190 95% 39%;
+    --border: 0 0% 14%;               /* #242424 */
+    --input: 0 0% 14%;
+    --ring: 40 88% 48%;
 
-    --sidebar: 222 44% 6%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-active: 217 91% 50%;
+    --sidebar: 0 0% 5%;               /* #0d0d0d */
+    --sidebar-foreground: 40 10% 85%;
+    --sidebar-active: 40 88% 48%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+
+    /* Chart palette */
+    --chart-heat: #f97316;
+    --chart-cool: #38bdf8;
+    --chart-idle: #525252;
+    --chart-outdoor: #fbbf24;
+    --chart-humidity: #34d399;
+    --chart-wind: #a78bfa;
   }
 
   * {
@@ -53,18 +62,87 @@
   }
 }
 
+/* Noise texture overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: hsl(var(--background));
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
-  border-radius: 4px;
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.4);
+}
+
+/* Glass card effect */
+@layer components {
+  .glass-card {
+    @apply rounded-xl border border-white/[0.06] bg-card;
+    box-shadow:
+      0 0 0 1px hsl(var(--border)),
+      0 2px 8px -2px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+  .glass-card-hover:hover {
+    border-color: hsl(var(--primary) / 0.15);
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.1),
+      0 4px 16px -4px rgba(0, 0, 0, 0.4),
+      0 0 20px -8px hsl(var(--primary) / 0.08),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* Glow effect for stat values */
+  .value-glow {
+    text-shadow: 0 0 24px hsl(var(--primary) / 0.15);
+  }
+
+  /* Sidebar nav link with animated indicator */
+  .nav-link-active {
+    position: relative;
+  }
+  .nav-link-active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 60%;
+    border-radius: 0 3px 3px 0;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 8px hsl(var(--primary) / 0.5);
+  }
+}
+
+/* Selection color */
+::selection {
+  background: hsl(var(--primary) / 0.25);
+  color: hsl(var(--foreground));
 }

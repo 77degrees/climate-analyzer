@@ -36,13 +36,15 @@ import {
   type ThermostatInfo,
 } from "@/lib/api";
 
-const CHART_GRID = "hsl(222, 20%, 18%)";
-const CHART_TICK = { fill: "hsl(215, 15%, 55%)", fontSize: 11 };
+const CHART_GRID = "#1a1a1a";
+const CHART_TICK = { fill: "#666", fontSize: 11, fontFamily: "JetBrains Mono" };
 const TOOLTIP_STYLE = {
-  backgroundColor: "hsl(222, 41%, 8%)",
-  border: "1px solid hsl(222, 20%, 18%)",
-  borderRadius: "8px",
+  backgroundColor: "#141414",
+  border: "1px solid #242424",
+  borderRadius: "10px",
   fontSize: 12,
+  fontFamily: "DM Sans",
+  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
 };
 
 const DAYS_MAP: Record<number, number> = {
@@ -61,7 +63,6 @@ export default function Performance() {
 
   const days = DAYS_MAP[hours] || Math.ceil(hours / 24);
 
-  // Load thermostats on mount
   useEffect(() => {
     getThermostats().then(setThermostats).catch(console.error);
   }, []);
@@ -97,7 +98,6 @@ export default function Performance() {
         ? "warning"
         : "destructive";
 
-  // Scatter data: only points with outdoor temp
   const scatterHeating = energyProfile
     .filter((d) => d.outdoor_avg_temp != null && d.heating_hours > 0)
     .map((d) => ({ x: d.outdoor_avg_temp, y: d.heating_hours, date: d.date }));
@@ -108,14 +108,18 @@ export default function Performance() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">Performance</h1>
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Performance</h1>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            HVAC efficiency & runtime analysis
+          </p>
+        </div>
         <div className="flex items-center gap-3">
-          {/* Thermostat Selector */}
           {thermostats.length > 1 && (
             <select
               value={sensorId ?? ""}
               onChange={(e) => setSensorId(e.target.value ? Number(e.target.value) : undefined)}
-              className="rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-xs text-foreground"
+              className="rounded-lg border border-border/50 bg-secondary/50 px-3 py-1.5 font-mono text-[11px] text-foreground"
             >
               <option value="">All Thermostats</option>
               {thermostats.map((t) => (
@@ -128,7 +132,7 @@ export default function Performance() {
           <TimeRangeSelector value={hours} onChange={setHours} />
           <button
             onClick={fetchData}
-            className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-2 rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-[12px] text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
@@ -141,21 +145,21 @@ export default function Performance() {
           title="Avg Recovery Time"
           value={summary ? `${summary.avg_recovery_minutes} min` : "--"}
           icon={Timer}
-          borderColor="#06b6d4"
+          borderColor="#38bdf8"
         />
         <StatCard
           title="Duty Cycle"
           value={summary ? `${summary.duty_cycle_pct}%` : "--"}
           subtitle="Heating + Cooling"
           icon={Gauge}
-          borderColor="#f59e0b"
+          borderColor="#fbbf24"
         />
         <StatCard
           title="Hold Efficiency"
           value={summary ? `\u00b1${summary.hold_efficiency}\u00b0F` : "--"}
           subtitle="Avg drift from setpoint"
           icon={Target}
-          borderColor="#8b5cf6"
+          borderColor="#a78bfa"
         />
         <StatCard
           title="Efficiency Score"
@@ -163,19 +167,21 @@ export default function Performance() {
           subtitle="Out of 100"
           subtitleColor={scoreColor as any}
           icon={Award}
-          borderColor="#10b981"
+          borderColor="#34d399"
         />
       </div>
 
       {/* Energy Profile Scatter Chart */}
       {(scatterHeating.length > 0 || scatterCooling.length > 0) && (
-        <Card className="p-5">
-          <h2 className="mb-1 font-display text-sm font-semibold text-foreground">
-            Energy Profile
-          </h2>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Outdoor temperature vs. daily HVAC runtime
-          </p>
+        <Card className="p-6">
+          <div className="mb-5">
+            <h2 className="font-display text-sm font-semibold text-foreground">
+              Energy Profile
+            </h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Outdoor temperature vs. daily HVAC runtime
+            </p>
+          </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart>
@@ -187,7 +193,7 @@ export default function Performance() {
                   tick={CHART_TICK}
                   stroke={CHART_GRID}
                   tickFormatter={(v) => `${v}\u00b0`}
-                  label={{ value: "Outdoor Temp (\u00b0F)", position: "bottom", fill: "hsl(215, 15%, 55%)", fontSize: 11, offset: -5 }}
+                  label={{ value: "Outdoor Temp (\u00b0F)", position: "bottom", fill: "#666", fontSize: 11, fontFamily: "DM Sans", offset: -5 }}
                 />
                 <YAxis
                   type="number"
@@ -195,7 +201,7 @@ export default function Performance() {
                   name="Runtime"
                   tick={CHART_TICK}
                   stroke={CHART_GRID}
-                  label={{ value: "Hours", angle: -90, position: "insideLeft", fill: "hsl(215, 15%, 55%)", fontSize: 11 }}
+                  label={{ value: "Hours", angle: -90, position: "insideLeft", fill: "#666", fontSize: 11, fontFamily: "DM Sans" }}
                 />
                 <ZAxis range={[40, 200]} />
                 <Tooltip
@@ -209,12 +215,12 @@ export default function Performance() {
                     return p?.date ? new Date(p.date + "T00:00:00").toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "";
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 11, fontFamily: "DM Sans" }} />
                 {scatterHeating.length > 0 && (
                   <Scatter name="Heating" data={scatterHeating} fill="#f97316" />
                 )}
                 {scatterCooling.length > 0 && (
-                  <Scatter name="Cooling" data={scatterCooling} fill="#3b82f6" />
+                  <Scatter name="Cooling" data={scatterCooling} fill="#38bdf8" />
                 )}
               </ScatterChart>
             </ResponsiveContainer>
@@ -223,10 +229,13 @@ export default function Performance() {
       )}
 
       {/* Recovery Times Chart */}
-      <Card className="p-5">
-        <h2 className="mb-4 font-display text-sm font-semibold text-foreground">
-          Recovery Events
-        </h2>
+      <Card className="p-6">
+        <div className="mb-5">
+          <h2 className="font-display text-sm font-semibold text-foreground">
+            Recovery Events
+          </h2>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Time to reach setpoint after HVAC activation</p>
+        </div>
         <div className="h-72">
           {recovery.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -243,7 +252,7 @@ export default function Performance() {
                 <YAxis
                   tick={CHART_TICK}
                   stroke={CHART_GRID}
-                  label={{ value: "Minutes", angle: -90, position: "insideLeft", fill: "hsl(215, 15%, 55%)", fontSize: 11 }}
+                  label={{ value: "Minutes", angle: -90, position: "insideLeft", fill: "#666", fontSize: 11, fontFamily: "DM Sans" }}
                 />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
@@ -251,16 +260,16 @@ export default function Performance() {
                     if (!active || !payload?.length) return null;
                     const e = payload[0].payload as RecoveryEvent;
                     return (
-                      <div style={TOOLTIP_STYLE} className="rounded-lg p-3">
-                        <p className="font-semibold" style={{ color: e.action === "heating" ? "#f97316" : "#3b82f6" }}>
+                      <div style={TOOLTIP_STYLE} className="rounded-xl p-3">
+                        <p className="font-semibold" style={{ color: e.action === "heating" ? "#f97316" : "#38bdf8" }}>
                           {e.action === "heating" ? "Heating" : "Cooling"} {e.success ? "\u2713" : "\u2717"}
                         </p>
-                        <p className="text-xs text-gray-300">{new Date(e.start_time).toLocaleString()}</p>
-                        <p className="mt-1 text-xs text-gray-400">Duration: <span className="text-gray-200">{e.duration_minutes} min</span></p>
-                        {e.start_temp != null && <p className="text-xs text-gray-400">Start: <span className="text-gray-200">{e.start_temp}\u00b0F</span></p>}
-                        {e.end_temp != null && <p className="text-xs text-gray-400">End: <span className="text-gray-200">{e.end_temp}\u00b0F</span></p>}
-                        {e.setpoint != null && <p className="text-xs text-gray-400">Setpoint: <span className="text-gray-200">{e.setpoint}\u00b0F</span></p>}
-                        {e.outdoor_temp != null && <p className="text-xs text-gray-400">Outdoor: <span className="text-gray-200">{e.outdoor_temp}\u00b0F</span></p>}
+                        <p className="text-[11px] text-gray-400">{new Date(e.start_time).toLocaleString()}</p>
+                        <p className="mt-1 text-[11px] text-gray-500">Duration: <span className="text-gray-300 font-mono">{e.duration_minutes} min</span></p>
+                        {e.start_temp != null && <p className="text-[11px] text-gray-500">Start: <span className="text-gray-300 font-mono">{e.start_temp}\u00b0F</span></p>}
+                        {e.end_temp != null && <p className="text-[11px] text-gray-500">End: <span className="text-gray-300 font-mono">{e.end_temp}\u00b0F</span></p>}
+                        {e.setpoint != null && <p className="text-[11px] text-gray-500">Setpoint: <span className="text-gray-300 font-mono">{e.setpoint}\u00b0F</span></p>}
+                        {e.outdoor_temp != null && <p className="text-[11px] text-gray-500">Outdoor: <span className="text-gray-300 font-mono">{e.outdoor_temp}\u00b0F</span></p>}
                       </div>
                     );
                   }}
@@ -269,8 +278,8 @@ export default function Performance() {
                   {recovery.map((entry, idx) => (
                     <Cell
                       key={idx}
-                      fill={entry.action === "heating" ? "#f97316" : "#3b82f6"}
-                      opacity={entry.success ? 1 : 0.5}
+                      fill={entry.action === "heating" ? "#f97316" : "#38bdf8"}
+                      opacity={entry.success ? 1 : 0.4}
                     />
                   ))}
                 </Bar>
@@ -285,10 +294,13 @@ export default function Performance() {
       </Card>
 
       {/* Duty Cycle Stacked Bar */}
-      <Card className="p-5">
-        <h2 className="mb-4 font-display text-sm font-semibold text-foreground">
-          Daily Duty Cycle
-        </h2>
+      <Card className="p-6">
+        <div className="mb-5">
+          <h2 className="font-display text-sm font-semibold text-foreground">
+            Daily Duty Cycle
+          </h2>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Percentage of time in each HVAC state</p>
+        </div>
         <div className="h-64">
           {dutyCycle.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -305,10 +317,10 @@ export default function Performance() {
                 />
                 <YAxis domain={[0, 100]} tick={CHART_TICK} stroke={CHART_GRID} tickFormatter={(v) => `${v}%`} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => `${v}%`} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 11, fontFamily: "DM Sans" }} />
                 <Bar dataKey="heating_pct" name="Heating" stackId="a" fill="#f97316" />
-                <Bar dataKey="cooling_pct" name="Cooling" stackId="a" fill="#3b82f6" />
-                <Bar dataKey="idle_pct" name="Idle" stackId="a" fill="#6b7280" />
+                <Bar dataKey="cooling_pct" name="Cooling" stackId="a" fill="#38bdf8" />
+                <Bar dataKey="idle_pct" name="Idle" stackId="a" fill="#525252" />
               </BarChart>
             </ResponsiveContainer>
           ) : (

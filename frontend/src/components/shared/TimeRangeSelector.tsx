@@ -17,16 +17,16 @@ const ranges = [
 
 export function TimeRangeSelector({ value, onChange }: TimeRangeSelectorProps) {
   return (
-    <div className="flex gap-1 rounded-lg border border-border bg-secondary/50 p-1">
+    <div className="flex gap-0.5 rounded-lg border border-border/50 bg-secondary/50 p-1">
       {ranges.map((r) => (
         <button
           key={r.hours}
           onClick={() => onChange(r.hours)}
           className={cn(
-            "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            "rounded-md px-2.5 py-1.5 font-mono text-[11px] font-medium transition-all duration-200",
             value === r.hours
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground",
+              ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent",
           )}
         >
           {r.label}
