@@ -265,6 +265,17 @@ export interface SetpointPoint {
   hvac_action: string | null;
 }
 
+export interface AcStruggleDay {
+  date: string;
+  outdoor_high: number | null;
+  outdoor_avg: number | null;
+  hours_cooling: number;
+  max_overshoot: number;     // indoor_temp - setpoint_cool while cooling; positive = struggling
+  avg_overshoot: number;
+  struggle_hours: number;    // hours where overshoot > 0.5°F
+  struggle_score: number;    // 0–100 severity composite
+}
+
 // ── Insights API calls ────────────────────────────────────────
 
 export const getActivityHeatmap = (days: number, sensorId?: number) =>
@@ -275,4 +286,6 @@ export const getTempBins = (days: number, sensorId?: number) =>
   fetchJSON<TempBin[]>(`/metrics/temp-bins?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
 export const getSetpointHistory = (days: number, sensorId?: number) =>
   fetchJSON<SetpointPoint[]>(`/metrics/setpoints?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
+export const getAcStruggle = (days: number, sensorId?: number) =>
+  fetchJSON<AcStruggleDay[]>(`/metrics/ac-struggle?days=${days}${sensorId ? `&sensor_id=${sensorId}` : ""}`);
 

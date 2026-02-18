@@ -446,6 +446,95 @@ async def compute_setpoint_history(
     return points
 
 
+async def compute_ac_struggle(
+    db: AsyncSession,
+    sensor_id: int,
+    start: datetime,
+    end: datetime,
+) -> list[dict]:
+    """Find days when AC was running but indoor temp exceeded setpoint (AC can't keep up)."""
+    result = await db.execute(
+        select(Reading)
+        .where(
+            and_(
+                Reading.sensor_id == sensor_id,
+                Reading.timestamp >= start,
+                Reading.timestamp <= end,
+                Reading.hvac_action == "cooling",
+                Reading.value.isnot(None),
+                Reading.setpoint_cool.isnot(None),
+            )
+        )
+        .order_by(Reading.timestamp)
+    )
+    readings = result.scalars().all()
+
+    if not readings:
+        return []
+
+    # Group overshoot values by date
+    days: dict[str, list[float]] = {}
+    for r in readings:
+        day = r.timestamp.strftime("%Y-%m-%d")
+        overshoot = r.value - r.setpoint_cool
+        if day not in days:
+            days[day] = []
+        days[day].append(overshoot)
+
+    # Daily outdoor high + avg from weather
+    weather_result = await db.execute(
+        select(
+            func.strftime("%Y-%m-%d", WeatherObservation.timestamp).label("day"),
+            func.max(WeatherObservation.temperature).label("outdoor_high"),
+            func.avg(WeatherObservation.temperature).label("outdoor_avg"),
+        )
+        .where(
+            and_(
+                WeatherObservation.timestamp >= start,
+                WeatherObservation.timestamp <= end,
+                WeatherObservation.temperature.isnot(None),
+            )
+        )
+        .group_by(func.strftime("%Y-%m-%d", WeatherObservation.timestamp))
+    )
+    outdoor = {
+        row.day: (round(row.outdoor_high, 1), round(row.outdoor_avg, 1))
+        for row in weather_result
+    }
+
+    result_list = []
+    for day in sorted(days.keys()):
+        overshoots = days[day]
+        n = len(overshoots)
+
+        max_ov = round(max(overshoots), 2)
+        avg_ov = round(sum(overshoots) / n, 2)
+        struggle_n = sum(1 for o in overshoots if o > 0.5)
+        struggle_hours = round(struggle_n / 12, 1)   # 5-min intervals → hours
+        hours_cooling = round(n / 12, 1)
+
+        outdoor_high, outdoor_avg = outdoor.get(day, (None, None))
+
+        # Struggle score 0–100: severity of overshoot + fraction of time struggling
+        struggle_pct = struggle_n / max(n, 1)
+        overshoot_score = min(max(max_ov, 0) / 5.0 * 60, 60)  # 5°F overshoot = max 60 pts
+        pct_score = struggle_pct * 40                           # 100% of time = 40 pts
+        struggle_score = round(min(overshoot_score + pct_score, 100), 1)
+
+        result_list.append({
+            "date": day,
+            "outdoor_high": outdoor_high,
+            "outdoor_avg": outdoor_avg,
+            "hours_cooling": hours_cooling,
+            "max_overshoot": max_ov,
+            "avg_overshoot": avg_ov,
+            "struggle_hours": struggle_hours,
+            "struggle_score": struggle_score,
+        })
+
+    return result_list
+
+
 async def compute_efficiency_score(
     avg_recovery_min: float,
     hold_efficiency: float,

@@ -6,7 +6,7 @@ from database import get_db
 from models import Sensor, Reading, Zone
 from schemas import (
     RecoveryEvent, DutyCycleDay, MetricsSummary, EnergyProfileDay, ThermostatInfo,
-    HeatmapCell, MonthlyTrend, TempBin, SetpointPoint,
+    HeatmapCell, MonthlyTrend, TempBin, SetpointPoint, AcStruggleDay,
 )
 from services.metrics_engine import (
     compute_recovery_events,
@@ -18,6 +18,7 @@ from services.metrics_engine import (
     compute_monthly_trends,
     compute_temp_bins,
     compute_setpoint_history,
+    compute_ac_struggle,
 )
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -155,6 +156,21 @@ async def get_setpoint_history(
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
     return await compute_setpoint_history(db, sid, start, end)
+
+
+@router.get("/ac-struggle", response_model=list[AcStruggleDay])
+async def get_ac_struggle(
+    days: int = Query(365, ge=30, le=730),
+    sensor_id: int | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Daily breakdown of AC struggle: when indoor temp exceeded cooling setpoint while running."""
+    sid = await _get_climate_sensor_id(db, sensor_id)
+    if not sid:
+        return []
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+    return await compute_ac_struggle(db, sid, start, end)
 
 
 @router.get("/summary", response_model=MetricsSummary)

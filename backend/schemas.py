@@ -216,6 +216,17 @@ class SetpointPoint(BaseModel):
     hvac_action: str | None
 
 
+class AcStruggleDay(BaseModel):
+    date: str
+    outdoor_high: float | None      # max outdoor temp that day
+    outdoor_avg: float | None       # avg outdoor temp that day
+    hours_cooling: float            # hours AC ran in cooling mode
+    max_overshoot: float            # max(indoor_temp - setpoint_cool) while cooling; + = struggling
+    avg_overshoot: float            # avg overshoot while cooling
+    struggle_hours: float           # hours where overshoot > 0.5°F
+    struggle_score: float           # 0–100 severity composite
+
+
 # ── DB Stats ──────────────────────────────────────────────────
 
 class DbStats(BaseModel):
