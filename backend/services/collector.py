@@ -99,8 +99,10 @@ async def collect_nws_observation():
     """Poll NWS for latest weather observation."""
     async with async_session() as db:
         station_id = await _get_setting(db, "nws_station_id")
-        if not station_id:
-            # Try to resolve — use DB values or fall back to config defaults
+        forecast_url_saved = await _get_setting(db, "nws_forecast_url")
+
+        if not station_id or not forecast_url_saved:
+            # Resolve to get station_id and/or forecast_url
             lat_str = await _get_setting(db, "nws_lat") or str(app_config.nws_lat)
             lon_str = await _get_setting(db, "nws_lon") or str(app_config.nws_lon)
             if not lat_str or not lon_str:
@@ -109,19 +111,22 @@ async def collect_nws_observation():
 
             try:
                 nws = NWSClient()
-                station_id, forecast_url = await nws.resolve_station(float(lat_str), float(lon_str))
-                db.add(AppSetting(key="nws_station_id", value=station_id))
-                if forecast_url:
+                resolved_id, resolved_url = await nws.resolve_station(float(lat_str), float(lon_str))
+                if not station_id:
+                    db.add(AppSetting(key="nws_station_id", value=resolved_id))
+                    station_id = resolved_id
+                if resolved_url and not forecast_url_saved:
                     result2 = await db.execute(select(AppSetting).where(AppSetting.key == "nws_forecast_url"))
                     existing_fu = result2.scalar_one_or_none()
                     if existing_fu:
-                        existing_fu.value = forecast_url
+                        existing_fu.value = resolved_url
                     else:
-                        db.add(AppSetting(key="nws_forecast_url", value=forecast_url))
+                        db.add(AppSetting(key="nws_forecast_url", value=resolved_url))
                 await db.commit()
             except Exception as e:
                 logger.error(f"Failed to resolve NWS station: {e}")
-                return
+                if not station_id:
+                    return
 
         try:
             nws = NWSClient()

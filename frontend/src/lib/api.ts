@@ -351,6 +351,23 @@ export const getWeatherHistoryRange = (start: string, end: string) =>
     `/weather/history?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
   );
 
+// ── Solar / Energy ───────────────────────────────────────────
+
+export interface SolarStatus {
+  current_production_w: number | null;
+  current_consumption_kw: number | null;
+  net_consumption_kw: number | null;      // positive = buying from grid, negative = exporting
+  energy_today_kwh: number | null;
+  energy_7d_kwh: number | null;
+  forecast_today_kwh: number | null;
+  forecast_tomorrow_kwh: number | null;
+  battery_power_w: number | null;         // positive = charging, negative = discharging
+  rain_active: boolean | null;
+  rain_entity: string | null;
+}
+
+export const getSolarStatus = () => fetchJSON<SolarStatus>("/solar");
+
 // ── Annotations ──────────────────────────────────────────────
 
 export interface Annotation {

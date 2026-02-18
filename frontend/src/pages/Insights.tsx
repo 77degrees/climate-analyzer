@@ -11,10 +11,14 @@ import {
   TrendingDown,
   Wind,
   Minus,
+  Zap,
+  Sun,
+  Battery,
+  Droplets,
+  CloudRain,
 } from "lucide-react";
 import {
   ComposedChart,
-  BarChart,
   Bar,
   Line,
   XAxis,
@@ -34,10 +38,12 @@ import {
   getActivityHeatmap,
   getThermostats,
   getZoneThermalPerf,
+  getSolarStatus,
   type AcStruggleDay,
   type HeatmapCell,
   type ThermostatInfo,
   type ZoneThermalPerf,
+  type SolarStatus,
 } from "@/lib/api";
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
@@ -227,15 +233,31 @@ function ZonePerfCard({ zone, mode }: { zone: ZoneThermalPerf; mode: "hot" | "co
           </p>
         </div>
         <div>
-          <p className="font-mono text-[10px] text-muted-foreground">
-            {mode === "hot" ? "Above outdoor" : "Below outdoor"}
-          </p>
-          <p
-            className="font-mono text-lg font-semibold"
-            style={{ color: mode === "hot" ? "#f97316" : "#38bdf8" }}
-          >
-            {delta != null ? (delta > 0 ? `+${delta.toFixed(1)}°` : `${delta.toFixed(1)}°`) : "—"}
-          </p>
+          {mode === "hot" ? (
+            <>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {delta != null && delta < 0 ? "Below outdoor ✓" : "Above outdoor ⚠"}
+              </p>
+              <p
+                className="font-mono text-lg font-semibold"
+                style={{ color: delta != null && delta < 0 ? "#22c55e" : "#f97316" }}
+              >
+                {delta != null ? (delta > 0 ? `+${delta.toFixed(1)}°` : `${Math.abs(delta).toFixed(1)}°`) : "—"}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {delta != null && delta < 0 ? "Above outdoor ⚠" : "Below outdoor ✓"}
+              </p>
+              <p
+                className="font-mono text-lg font-semibold"
+                style={{ color: delta != null && delta < 0 ? "#f97316" : "#38bdf8" }}
+              >
+                {delta != null ? `${Math.abs(delta).toFixed(1)}°` : "—"}
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -268,23 +290,27 @@ export default function Insights() {
   const [struggle, setStruggle] = useState<AcStruggleDay[]>([]);
   const [heatmap, setHeatmap] = useState<HeatmapCell[]>([]);
   const [zonePerf, setZonePerf] = useState<ZoneThermalPerf[]>([]);
+  const [solar, setSolar] = useState<SolarStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getThermostats().then(setThermostats).catch(console.error);
+    getSolarStatus().then(setSolar).catch(console.error);
   }, []);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [str, hm, zp] = await Promise.all([
+      const [str, hm, zp, sol] = await Promise.all([
         getAcStruggle(rangeDays, sensorId),
         getActivityHeatmap(90, sensorId),
         getZoneThermalPerf(rangeDays),
+        getSolarStatus(),
       ]);
       setStruggle(str);
       setHeatmap(hm);
       setZonePerf(zp);
+      setSolar(sol);
     } catch (e) {
       console.error("Failed to load insights:", e);
     } finally {
@@ -394,7 +420,15 @@ export default function Insights() {
 
   return (
     <div className="space-y-6">
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
+
+      {/* ── Solar & Energy ──────────────────────────────────────────────────── */}
+      <SolarSection solar={solar} />
+
+      {/* ── Leander TX Lawn Care ────────────────────────────────────────────── */}
+      <LawnCareSection />
+
+      {/* ── AC Performance Header ───────────────────────────────────────────── */}
+      <div className="border-t border-border/30 pt-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight">
@@ -886,9 +920,170 @@ export default function Insights() {
           </p>
         </div>
       )}
+      </div>{/* end AC Performance section */}
+    </div>
+  );
+}
 
-      {/* ── Leander TX Seasonal Lawn Care ───────────────────────────────── */}
-      <LawnCareSection />
+// ── Solar & Energy Section ────────────────────────────────────────────────────
+
+function SolarSection({ solar }: { solar: SolarStatus | null }) {
+  if (!solar) {
+    return (
+      <div>
+        <div className="mb-3 flex items-center gap-2">
+          <Sun className="h-4 w-4 text-[#fbbf24]" />
+          <h2 className="font-display text-lg font-bold tracking-tight">Solar & Home Energy</h2>
+        </div>
+        <div className="flex h-20 items-center justify-center rounded-xl border border-border/20 bg-secondary/10 text-sm text-muted-foreground">
+          Loading solar data…
+        </div>
+      </div>
+    );
+  }
+
+  const prod = solar.current_production_w;
+  const cons = solar.current_consumption_kw;
+  const net = solar.net_consumption_kw;
+  const todayKwh = solar.energy_today_kwh;
+  const sevenD = solar.energy_7d_kwh;
+  const fcToday = solar.forecast_today_kwh;
+  const fcTomorrow = solar.forecast_tomorrow_kwh;
+  const battW = solar.battery_power_w;
+  const rainActive = solar.rain_active;
+
+  // Net label
+  const netLabel = net == null ? null : net > 0.05 ? "buying from grid" : net < -0.05 ? "exporting to grid" : "grid balanced";
+  const netColor = net == null ? "#6b7280" : net > 0.05 ? "#f97316" : "#22c55e";
+
+  // Battery label
+  const battLabel = battW == null ? null : battW > 10 ? "charging" : battW < -10 ? "discharging" : "idle";
+  const battColor = battW == null ? "#6b7280" : battW > 10 ? "#22c55e" : battW < -10 ? "#f97316" : "#6b7280";
+
+  // Production as % of forecast (for visual bar)
+  const prodKwh = prod != null ? prod / 1000 : null;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sun className="h-4 w-4 text-[#fbbf24]" />
+          <h2 className="font-display text-lg font-bold tracking-tight">Solar & Home Energy</h2>
+          <span className="rounded-full border border-[#fbbf24]/20 bg-[#fbbf24]/5 px-2 py-0.5 font-mono text-[9px] text-[#fbbf24]/80">
+            ENPHASE
+          </span>
+        </div>
+        {/* Rain sensor badge */}
+        {rainActive != null && (
+          <div className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[10px] ${
+            rainActive
+              ? "border-[#38bdf8]/30 bg-[#38bdf8]/10 text-[#38bdf8]"
+              : "border-border/30 bg-secondary/20 text-muted-foreground"
+          }`}>
+            {rainActive ? <CloudRain className="h-3 w-3" /> : <Droplets className="h-3 w-3" />}
+            {rainActive ? "Rain detected — skip irrigation" : "No rain — ok to water"}
+          </div>
+        )}
+      </div>
+
+      {/* Main metrics grid */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+
+        {/* Production */}
+        <div className="glass-card p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-display text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Producing</p>
+              <p className="mt-1.5 font-mono text-xl font-bold text-[#fbbf24]">
+                {prod != null ? `${prod >= 1000 ? `${(prod/1000).toFixed(1)}kW` : `${prod}W`}` : "—"}
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">right now</p>
+            </div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fbbf24]/10">
+              <Sun className="h-4 w-4 text-[#fbbf24]" />
+            </div>
+          </div>
+        </div>
+
+        {/* Consumption */}
+        <div className="glass-card p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-display text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Consuming</p>
+              <p className="mt-1.5 font-mono text-xl font-bold text-foreground">
+                {cons != null ? `${cons.toFixed(1)}kW` : "—"}
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">house total</p>
+            </div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary/40">
+              <Zap className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+        </div>
+
+        {/* Net */}
+        <div className="glass-card p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-display text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Net Grid</p>
+              <p className="mt-1.5 font-mono text-xl font-bold" style={{ color: netColor }}>
+                {net != null ? `${net > 0 ? "+" : ""}${net.toFixed(2)}kW` : "—"}
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{netLabel ?? "—"}</p>
+            </div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${netColor}15` }}>
+              <Zap className="h-4 w-4" style={{ color: netColor }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Today's production */}
+        <div className="glass-card p-4">
+          <div>
+            <p className="font-display text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Today</p>
+            <p className="mt-1.5 font-mono text-xl font-bold text-[#34d399]">
+              {todayKwh != null ? `${todayKwh}kWh` : "—"}
+            </p>
+            {fcToday != null && (
+              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                forecast {fcToday}kWh
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Battery */}
+        <div className="glass-card p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-display text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Battery</p>
+              <p className="mt-1.5 font-mono text-xl font-bold" style={{ color: battColor }}>
+                {battW != null ? `${battW > 0 ? "+" : ""}${battW >= 1000 || battW <= -1000 ? `${(battW/1000).toFixed(1)}kW` : `${battW}W`}` : "—"}
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{battLabel ?? "3 units"}</p>
+            </div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary/40">
+              <Battery className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary row: 7-day + forecast tomorrow */}
+      {(sevenD != null || fcTomorrow != null) && (
+        <div className="mt-2 flex gap-3 text-[11px] text-muted-foreground">
+          {sevenD != null && (
+            <span className="rounded-lg border border-border/30 bg-secondary/20 px-3 py-1.5 font-mono">
+              Last 7 days: <span className="text-[#34d399] font-semibold">{sevenD}kWh</span>
+            </span>
+          )}
+          {fcTomorrow != null && (
+            <span className="rounded-lg border border-border/30 bg-secondary/20 px-3 py-1.5 font-mono">
+              Tomorrow forecast: <span className="text-[#fbbf24] font-semibold">{fcTomorrow}kWh</span>
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
